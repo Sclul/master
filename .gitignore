@@ -3,3 +3,4 @@ notebook
 dash/app/cache
 dash/app/assets/dashExtensions_default.js
 dash/app/data
+dash/app/__pycache__
