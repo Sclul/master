@@ -1,6 +1,6 @@
 """Dash callback functions for the application."""
 import logging
-from dash_extensions.enrich import Input, Output, no_update
+from dash_extensions.enrich import Input, Output, no_update # type: ignore
 
 from street_processor import StreetProcessor
 
@@ -38,10 +38,19 @@ class CallbackManager:
                 self.street_processor.save_polygon(geojson, self.data_paths["polygon_path"])
                 
                 # Process streets and return status
-                return self.street_processor.process_streets_from_polygon(
+                streets_status = self.street_processor.process_streets_from_polygon(
                     geojson, 
                     self.data_paths["streets_path"]
                 )
+                
+                # Process buildings
+                buildings_status = self.street_processor.process_buildings_from_polygon(
+                    geojson,
+                    self.data_paths["buildings_path"]
+                )
+                logger.info(f"Building processing status: {buildings_status}")
+                
+                return streets_status # The main status returned to update_log is still from streets
             
             return no_update
         

@@ -1,8 +1,8 @@
 """Dash layout components and UI elements."""
-import dash_leaflet as dl
+import dash_leaflet as dl # type: ignore
 from dash import dcc
-from dash_extensions.enrich import html
-from dash_extensions.javascript import assign
+from dash_extensions.enrich import html # type: ignore
+from dash_extensions.javascript import assign # type: ignore
 
 
 def get_event_handlers():

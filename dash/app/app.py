@@ -1,6 +1,6 @@
 """Main application entry point for the Dash OSM Street Processor."""
 import logging
-from dash_extensions.enrich import DashProxy
+from dash_extensions.enrich import DashProxy # type: ignore
 
 from config import Config
 from layout import create_layout

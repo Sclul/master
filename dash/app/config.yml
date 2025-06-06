@@ -21,3 +21,4 @@ data_paths:
   output_directory: "./data" # Directory where GeoJSON files will be saved
   polygon_geojson: "polygon.geojson" # Filename for the drawn polygon
   streets_geojson: "streets.geojson" # Filename for the processed streets
+  buildings_geojson: "buildings.geojson" # Filename for the processed buildings

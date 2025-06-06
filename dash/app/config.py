@@ -26,6 +26,7 @@ class Config:
             "output_directory": "./data",
             "polygon_geojson": "polygon.geojson",
             "streets_geojson": "streets.geojson",
+            "buildings_geojson": "buildings.geojson", # Add this line
         }
     }
     
@@ -65,6 +66,7 @@ class Config:
         self.data_dir = self.config["data_paths"]["output_directory"]
         self.polygon_path = os.path.join(self.data_dir, self.config["data_paths"]["polygon_geojson"])
         self.streets_path = os.path.join(self.data_dir, self.config["data_paths"]["streets_geojson"])
+        self.buildings_path = os.path.join(self.data_dir, self.config["data_paths"]["buildings_geojson"]) # Add this line
         
         # Ensure data directory exists
         os.makedirs(self.data_dir, exist_ok=True)
@@ -96,5 +98,6 @@ class Config:
         return {
             "data_dir": self.data_dir,
             "polygon_path": self.polygon_path,
-            "streets_path": self.streets_path
+            "streets_path": self.streets_path,
+            "buildings_path": self.buildings_path  # Add this line
         }

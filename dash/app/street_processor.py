@@ -3,8 +3,8 @@ import json
 import logging
 from typing import Dict, Any, Optional
 
-import osmnx as ox
-from shapely.geometry import shape
+import osmnx as ox # type: ignore
+from shapely.geometry import shape # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,34 @@ class StreetProcessor:
             
         except Exception as e:
             logger.error(f"Error processing streets: {e}")
+            return {"status": "error", "message": str(e)}
+    
+    def process_buildings_from_polygon(self, geojson: Dict[str, Any], buildings_path: str) -> Dict[str, str]:
+        """
+        Process buildings from polygon and save to file.
+        
+        Returns:
+            Dict with status and optional message
+        """
+        try:
+            polygon = shape(geojson["geometry"])
+            
+            # Get buildings from polygon
+            # Ensure the 'building' tag is appropriate for your needs, or adjust as necessary
+            gdf = ox.features_from_polygon(polygon, tags={"building": True})
+            
+            if gdf.empty:
+                logger.info("No buildings found in the selected area.")
+                return {"status": "no_buildings"}
+            
+            # Save to GeoJSON
+            gdf.to_file(buildings_path, driver="GeoJSON")
+            logger.info(f"Buildings saved to {buildings_path}")
+            
+            return {"status": "saved"}
+            
+        except Exception as e:
+            logger.error(f"Error processing buildings: {e}")
             return {"status": "error", "message": str(e)}
     
     def _process_graph(self, graph):
