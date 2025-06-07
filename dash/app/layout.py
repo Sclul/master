@@ -4,6 +4,10 @@ from dash import dcc
 from dash_extensions.enrich import html # type: ignore
 from dash_extensions.javascript import assign # type: ignore
 
+from config import Config
+
+
+config = Config()
 
 def get_event_handlers():
     """Get JavaScript event handlers for the map."""
@@ -18,17 +22,25 @@ def get_event_handlers():
     )
 
 
-def create_map_component(event_handlers, center=[52.5200, 13.4050], zoom=15):
+def create_map_component(event_handlers, center=None, zoom=None):
     """Create the main map component with controls."""
+    # Use config values or fallback to parameters
+    center = center or config.map_settings["default_center"]
+    zoom = zoom or config.map_settings["default_zoom"]
+    measure_settings = config.map_settings["measure_settings"]
+    
     return dl.Map(
         [
-            dl.TileLayer(),
+            dl.TileLayer(
+                url=config.map_settings["tile_url"],
+                attribution=config.map_settings["attribution"]
+            ),
             dl.MeasureControl(
-                position="topleft",
-                primaryLengthUnit="meters",
-                primaryAreaUnit="sqmeters",
-                activeColor="blue",
-                completedColor="rgba(0, 0, 255, 0.6)" 
+                position=measure_settings["position"],
+                primaryLengthUnit=measure_settings["primary_length_unit"],
+                primaryAreaUnit=measure_settings["primary_area_unit"],
+                activeColor=measure_settings["active_color"],
+                completedColor=measure_settings["completed_color"] 
             ),
         ],
         eventHandlers=event_handlers,

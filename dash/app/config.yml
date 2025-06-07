@@ -22,3 +22,16 @@ data_paths:
   polygon_geojson: "polygon.geojson" # Filename for the drawn polygon
   streets_geojson: "streets.geojson" # Filename for the processed streets
   buildings_geojson: "buildings.geojson" # Filename for the processed buildings
+
+# Map display settings
+map_settings:
+  default_center: [52.5200, 13.4050]  # Berlin
+  default_zoom: 15                   # Default zoom level
+  tile_url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+  attribution: "© OpenStreetMap contributors"
+  measure_settings:
+    position: "topleft"
+    primary_length_unit: "meters"
+    primary_area_unit: "sqmeters"
+    active_color: "blue"
+    completed_color: "rgba(0, 0, 255, 0.6)"

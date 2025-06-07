@@ -26,7 +26,20 @@ class Config:
             "output_directory": "./data",
             "polygon_geojson": "polygon.geojson",
             "streets_geojson": "streets.geojson",
-            "buildings_geojson": "buildings.geojson", # Add this line
+            "buildings_geojson": "buildings.geojson",
+        },
+        "map_settings": {
+            "default_center": [52.5200, 13.4050],  # Berlin by default
+            "default_zoom": 15,
+            "tile_url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            "attribution": "© OpenStreetMap contributors",
+            "measure_settings": {
+                "position": "topleft",
+                "primary_length_unit": "meters",
+                "primary_area_unit": "sqmeters",
+                "active_color": "blue",
+                "completed_color": "rgba(0, 0, 255, 0.6)"
+            }
         }
     }
     
@@ -66,7 +79,7 @@ class Config:
         self.data_dir = self.config["data_paths"]["output_directory"]
         self.polygon_path = os.path.join(self.data_dir, self.config["data_paths"]["polygon_geojson"])
         self.streets_path = os.path.join(self.data_dir, self.config["data_paths"]["streets_geojson"])
-        self.buildings_path = os.path.join(self.data_dir, self.config["data_paths"]["buildings_geojson"]) # Add this line
+        self.buildings_path = os.path.join(self.data_dir, self.config["data_paths"]["buildings_geojson"])
         
         # Ensure data directory exists
         os.makedirs(self.data_dir, exist_ok=True)
@@ -99,5 +112,10 @@ class Config:
             "data_dir": self.data_dir,
             "polygon_path": self.polygon_path,
             "streets_path": self.streets_path,
-            "buildings_path": self.buildings_path  # Add this line
+            "buildings_path": self.buildings_path
         }
+    
+    @property
+    def map_settings(self) -> Dict[str, Any]:
+        """Get map display settings."""
+        return self.config["map_settings"]
