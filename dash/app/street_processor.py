@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 
 import osmnx as ox # type: ignore
 from shapely.geometry import shape # type: ignore
+from shapely.geometry import mapping # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,22 @@ class StreetProcessor:
                 logger.info("No buildings found in the selected area.")
                 return {"status": "no_buildings"}
             
+            # Add representative point to each building
+            # Ensure 'geometry' column exists and contains valid geometries
+            if "geometry" in gdf.columns:
+                def get_representative_point_coords(geom):
+                    if geom and not geom.is_empty:
+                        # Ensure the geometry is valid before getting the representative point
+                        if not geom.is_valid:
+                            geom = geom.buffer(0) # Attempt to fix invalid geometry
+                        if geom and not geom.is_empty and geom.is_valid:
+                            rp = geom.representative_point()
+                            return {"coordinates": [rp.x, rp.y]}
+                    return None
+                gdf["representative_point"] = gdf["geometry"].apply(get_representative_point_coords)
+            else:
+                logger.warning("No 'geometry' column found in buildings GeoDataFrame. Skipping representative point calculation.")
+
             # Save to GeoJSON
             gdf.to_file(buildings_path, driver="GeoJSON")
             logger.info(f"Buildings saved to {buildings_path}")
