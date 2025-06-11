@@ -4,7 +4,9 @@ import logging
 from typing import Dict, Any, Optional
 
 import osmnx as ox # type: ignore
-from shapely.geometry import shape # type: ignore
+import geopandas as gpd # type: ignore
+import fiona # type: ignore
+from shapely.geometry import shape, Point # type: ignore
 from shapely.geometry import mapping # type: ignore
 
 
@@ -18,6 +20,10 @@ class StreetProcessor:
         """Initialize with configuration."""
         self.config = config
         self.osmnx_settings = config["osmnx_settings"]
+        # Heat demand configuration
+        self.gdb_path = config.get("gdb_path", "/gdb/GDB.gdb")
+        self.gdb_layer = config.get("gdb_layer", "Raumwaermebedarf_ist")
+        self.heat_demand_column = config.get("heat_demand_column", "RW")
     
     def create_geojson_from_coordinates(self, coordinates: list) -> Dict[str, Any]:
         """Create GeoJSON feature from coordinates."""
@@ -71,9 +77,86 @@ class StreetProcessor:
             logger.error(f"Error processing streets: {e}")
             return {"status": "error", "message": str(e)}
     
+    def _get_heat_demand_at_point(self, rep_point_coords: list, gdb_layer_crs: Any) -> Optional[float]:
+        """
+        Query GDB for heat demand value at a representative point.
+        rep_point_coords: [longitude, latitude] from the representative_point property
+        """
+        try:
+            # Create Point geometry from coordinates
+            point_geom = Point(rep_point_coords[0], rep_point_coords[1])
+            point_gdf = gpd.GeoDataFrame([{'geometry': point_geom}], crs="EPSG:4326")
+            
+            # Transform to GDB CRS if needed
+            if gdb_layer_crs and str(point_gdf.crs).lower() != str(gdb_layer_crs).lower():
+                point_gdf = point_gdf.to_crs(gdb_layer_crs)
+            
+            query_geom = point_gdf.geometry.iloc[0]
+            
+            # Query GDB layer
+            intersecting_gdf = gpd.read_file(self.gdb_path, layer=self.gdb_layer, mask=query_geom)
+            
+            if not intersecting_gdf.empty:
+                # Find features that actually contain the point
+                containing_features = intersecting_gdf[intersecting_gdf.geometry.contains(query_geom)]
+                if not containing_features.empty:
+                    if self.heat_demand_column in containing_features.columns:
+                        value = containing_features.iloc[0][self.heat_demand_column]
+                        return float(value) if value is not None else None
+                    else:
+                        logger.warning(f"Column '{self.heat_demand_column}' not found in GDB layer")
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"Error querying heat demand for point {rep_point_coords}: {e}")
+            return None
+    
+    def _add_heat_demand_to_buildings(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """Add heat demand values to buildings GeoDataFrame."""
+        try:
+            # Get GDB layer CRS
+            gdb_layer_crs = None
+            try:
+                with fiona.open(self.gdb_path, layer=self.gdb_layer) as source:
+                    gdb_layer_crs = source.crs
+                logger.debug(f"GDB layer CRS: {gdb_layer_crs}")
+            except Exception as e:
+                logger.warning(f"Could not get GDB CRS: {e}")
+            
+            # Add heat demand values
+            heat_demands = []
+            successful_queries = 0
+            
+            for index, building in gdf.iterrows():
+                rep_point_data = building.get('representative_point')
+                
+                if rep_point_data and isinstance(rep_point_data, dict) and 'coordinates' in rep_point_data:
+                    coords = rep_point_data['coordinates']
+                    heat_demand = self._get_heat_demand_at_point(coords, gdb_layer_crs)
+                    heat_demands.append(heat_demand)
+                    
+                    if heat_demand is not None:
+                        successful_queries += 1
+                else:
+                    heat_demands.append(None)
+            
+            # Add heat demand column
+            gdf[self.heat_demand_column] = heat_demands
+            
+            logger.info(f"Heat demand query results: {successful_queries}/{len(gdf)} buildings have heat demand data")
+            
+            return gdf
+            
+        except Exception as e:
+            logger.error(f"Error adding heat demand to buildings: {e}")
+            # Return original GDF if heat demand processing fails
+            return gdf
+    
     def process_buildings_from_polygon(self, geojson: Dict[str, Any], buildings_path: str) -> Dict[str, str]:
         """
         Process buildings from polygon and save to file.
+        Automatically adds heat demand data from GDB.
         
         Returns:
             Dict with status and optional message
@@ -82,7 +165,6 @@ class StreetProcessor:
             polygon = shape(geojson["geometry"])
             
             # Get buildings from polygon
-            # Ensure the 'building' tag is appropriate for your needs, or adjust as necessary
             gdf = ox.features_from_polygon(polygon, tags={"building": True})
             
             if gdf.empty:
@@ -90,7 +172,6 @@ class StreetProcessor:
                 return {"status": "no_buildings"}
             
             # Add representative point to each building
-            # Ensure 'geometry' column exists and contains valid geometries
             if "geometry" in gdf.columns:
                 def get_representative_point_coords(geom):
                     if geom and not geom.is_empty:
@@ -104,16 +185,54 @@ class StreetProcessor:
                 gdf["representative_point"] = gdf["geometry"].apply(get_representative_point_coords)
             else:
                 logger.warning("No 'geometry' column found in buildings GeoDataFrame. Skipping representative point calculation.")
+            
+            # Add heat demand data automatically
+            logger.info("Querying heat demand data for buildings...")
+            gdf = self._add_heat_demand_to_buildings(gdf)
 
             # Save to GeoJSON
             gdf.to_file(buildings_path, driver="GeoJSON")
-            logger.info(f"Buildings saved to {buildings_path}")
+            logger.info(f"Buildings with heat demand data saved to {buildings_path}")
             
-            return {"status": "saved"}
+            # Generate summary statistics
+            heat_demand_stats = self._get_heat_demand_summary(gdf)
+            
+            return {
+                "status": "saved", 
+                "heat_demand_stats": heat_demand_stats
+            }
             
         except Exception as e:
             logger.error(f"Error processing buildings: {e}")
             return {"status": "error", "message": str(e)}
+    
+    def _get_heat_demand_summary(self, gdf: gpd.GeoDataFrame) -> Dict[str, Any]:
+        """Generate summary statistics for heat demand data."""
+        try:
+            if self.heat_demand_column not in gdf.columns:
+                return {"message": "No heat demand data available"}
+            
+            heat_data = gdf[self.heat_demand_column].dropna()
+            
+            if len(heat_data) == 0:
+                return {"message": "No valid heat demand values found"}
+            
+            stats = {
+                "total_buildings": len(gdf),
+                "buildings_with_data": len(heat_data),
+                "coverage_percentage": round((len(heat_data) / len(gdf)) * 100, 1),
+                "mean_heat_demand": round(heat_data.mean(), 2),
+                "median_heat_demand": round(heat_data.median(), 2),
+                "min_heat_demand": round(heat_data.min(), 2),
+                "max_heat_demand": round(heat_data.max(), 2),
+                "total_heat_demand": round(heat_data.sum(), 2)
+            }
+            
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Error generating heat demand summary: {e}")
+            return {"message": f"Error generating summary: {str(e)}"}
     
     def _process_graph(self, graph):
         """Process the OSM graph with projection and consolidation."""
@@ -148,3 +267,19 @@ class StreetProcessor:
             return "No streets saved yet."
         except Exception as e:
             return f"Error reading {streets_path}: {e}"
+    
+    def load_buildings_data(self, buildings_path: str) -> Optional[str]:
+        """
+        Load buildings data from file for display.
+        
+        Returns:
+            JSON string of the data or error message
+        """
+        try:
+            with open(buildings_path, "r") as f:
+                data = json.load(f)
+            return json.dumps(data, indent=2)
+        except FileNotFoundError:
+            return "No buildings saved yet."
+        except Exception as e:
+            return f"Error reading {buildings_path}: {e}"

@@ -2,3 +2,5 @@ dash
 dash-leaflet
 osmnx
 shapely
+fiona
+geopandas

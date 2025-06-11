@@ -6,5 +6,6 @@ services:
       - "8050:8050"
     volumes:
       - ./app:/app
+      - /home/jonas/KWP-NRW/Warmebedarf_NRW.gdb:/gdb/GDB.gdb:ro
     environment:
       - DASH_DEBUG_MODE=True

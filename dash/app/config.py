@@ -27,6 +27,9 @@ class Config:
             "polygon_geojson": "polygon.geojson",
             "streets_geojson": "streets.geojson",
             "buildings_geojson": "buildings.geojson",
+            "gdb_path": "/gdb/GDB.gdb",
+            "gdb_layer": "Raumwaermebedarf_ist", 
+            "heat_demand_column": "RW",  # or "RW_WW" or "RW_spez" depending on what you want
         },
         "map_settings": {
             "default_center": [52.5200, 13.4050],  # Berlin by default
