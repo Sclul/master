@@ -15,7 +15,7 @@ class CallbackManager:
         """Initialize with Dash app and configuration."""
         self.app = app
         self.config = config
-        self.street_processor = StreetProcessor(config.config)
+        self.street_processor = StreetProcessor(config)  # Pass config object, not config.config
         self.data_paths = config.data_paths
         
         # Register callbacks

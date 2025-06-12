@@ -27,12 +27,14 @@ class Config:
             "polygon_geojson": "polygon.geojson",
             "streets_geojson": "streets.geojson",
             "buildings_geojson": "buildings.geojson",
+        },
+        "heat_demand": {
             "gdb_path": "/gdb/GDB.gdb",
-            "gdb_layer": "Raumwaermebedarf_ist", 
-            "heat_demand_column": "RW",  # or "RW_WW" or "RW_spez" depending on what you want
+            "gdb_layer": "Raumwaermebedarf_ist",
+            "heat_demand_column": "RW",
         },
         "map_settings": {
-            "default_center": [52.5200, 13.4050],  # Berlin by default
+            "default_center": [50.9413, 6.9572],  # Cologne
             "default_zoom": 15,
             "tile_url": "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
             "attribution": "© OpenStreetMap contributors",
@@ -122,3 +124,8 @@ class Config:
     def map_settings(self) -> Dict[str, Any]:
         """Get map display settings."""
         return self.config["map_settings"]
+    
+    @property
+    def heat_demand(self) -> Dict[str, Any]:
+        """Get heat demand settings."""
+        return self.config.get("heat_demand", {})

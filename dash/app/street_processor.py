@@ -16,14 +16,16 @@ logger = logging.getLogger(__name__)
 class StreetProcessor:
     """Handles OSM street data processing and conversion."""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config):
         """Initialize with configuration."""
         self.config = config
-        self.osmnx_settings = config["osmnx_settings"]
-        # Heat demand configuration
-        self.gdb_path = config.get("gdb_path", "/gdb/GDB.gdb")
-        self.gdb_layer = config.get("gdb_layer", "Raumwaermebedarf_ist")
-        self.heat_demand_column = config.get("heat_demand_column", "RW")
+        self.osmnx_settings = config.osmnx_settings
+        
+        # Heat demand configuration - direct access to properties
+        heat_config = config.heat_demand
+        self.gdb_path = heat_config.get("gdb_path", "/gdb/GDB.gdb")
+        self.gdb_layer = heat_config.get("gdb_layer", "Raumwaermebedarf_ist")
+        self.heat_demand_column = heat_config.get("heat_demand_column", "RW")
     
     def create_geojson_from_coordinates(self, coordinates: list) -> Dict[str, Any]:
         """Create GeoJSON feature from coordinates."""
