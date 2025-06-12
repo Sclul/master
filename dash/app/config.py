@@ -45,6 +45,10 @@ class Config:
                 "active_color": "blue",
                 "completed_color": "rgba(0, 0, 255, 0.6)"
             }
+        },
+        "coordinate_system": {
+            "target_crs": "EPSG:5243",
+            "input_crs": "EPSG:4326"
         }
     }
     
@@ -129,3 +133,11 @@ class Config:
     def heat_demand(self) -> Dict[str, Any]:
         """Get heat demand settings."""
         return self.config.get("heat_demand", {})
+    
+    @property
+    def coordinate_system(self) -> Dict[str, str]:
+        """Get coordinate system settings."""
+        return self.config.get("coordinate_system", {
+            "target_crs": "EPSG:5243",
+            "input_crs": "EPSG:4326"
+        })

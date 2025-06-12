@@ -29,6 +29,11 @@ heat_demand:
   gdb_layer: "Raumwaermebedarf_ist"
   heat_demand_column: "RW"
 
+# Coordinate Reference System
+coordinate_system:
+  target_crs: "EPSG:5243"  # ETRS89 / LCC Germany
+  input_crs: "EPSG:4326"   # WGS84 (for OSM data)
+
 # Map display settings
 map_settings:
   default_center: [50.9413, 6.9572]  # Cologne, Germany

@@ -21,11 +21,16 @@ class StreetProcessor:
         self.config = config
         self.osmnx_settings = config.osmnx_settings
         
-        # Heat demand configuration - direct access to properties
+        # Heat demand configuration
         heat_config = config.heat_demand
         self.gdb_path = heat_config.get("gdb_path", "/gdb/GDB.gdb")
         self.gdb_layer = heat_config.get("gdb_layer", "Raumwaermebedarf_ist")
         self.heat_demand_column = heat_config.get("heat_demand_column", "RW")
+        
+        # Coordinate system configuration
+        crs_config = config.coordinate_system
+        self.target_crs = crs_config.get("target_crs", "EPSG:5243")
+        self.input_crs = crs_config.get("input_crs", "EPSG:4326")
     
     def create_geojson_from_coordinates(self, coordinates: list) -> Dict[str, Any]:
         """Create GeoJSON feature from coordinates."""
@@ -68,10 +73,15 @@ class StreetProcessor:
             # Process the graph
             processed_graph = self._process_graph(G)
             
-            # Convert to GeoDataFrame and save
+            # Convert to GeoDataFrame and transform to target CRS
             gdf_edges = ox.graph_to_gdfs(processed_graph, nodes=False, edges=True)
+            
+            # Transform to EPSG:5243
+            gdf_edges = gdf_edges.to_crs(self.target_crs)
+            
+            # Save to GeoJSON
             gdf_edges.to_file(streets_path, driver="GeoJSON")
-            logger.info(f"Streets saved to {streets_path}")
+            logger.info(f"Streets saved to {streets_path} (CRS: {gdf_edges.crs})")
             
             return {"status": "saved"}
             
@@ -82,12 +92,12 @@ class StreetProcessor:
     def _get_heat_demand_at_point(self, rep_point_coords: list, gdb_layer_crs: Any) -> Optional[float]:
         """
         Query GDB for heat demand value at a representative point.
-        rep_point_coords: [longitude, latitude] from the representative_point property
+        rep_point_coords: [x, y] coordinates in EPSG:5243
         """
         try:
-            # Create Point geometry from coordinates
+            # Create Point geometry from coordinates (already in EPSG:5243)
             point_geom = Point(rep_point_coords[0], rep_point_coords[1])
-            point_gdf = gpd.GeoDataFrame([{'geometry': point_geom}], crs="EPSG:4326")
+            point_gdf = gpd.GeoDataFrame([{'geometry': point_geom}], crs=self.target_crs)
             
             # Transform to GDB CRS if needed
             if gdb_layer_crs and str(point_gdf.crs).lower() != str(gdb_layer_crs).lower():
@@ -182,7 +192,7 @@ class StreetProcessor:
             ]
             
             # Add building use columns if they exist
-            use_columns = ['building:use', 'building:levels', ]
+            use_columns = ['building:use', 'building:levels']
             
             # Combine all desired columns
             desired_columns = essential_columns + address_columns + use_columns
@@ -193,7 +203,16 @@ class StreetProcessor:
             # Create filtered GeoDataFrame with only essential data
             gdf_filtered = gdf[available_columns].copy()
             
-            # Add representative point to each building
+            # Ensure input CRS is set (OSMnx typically returns data in EPSG:4326)
+            if gdf_filtered.crs is None:
+                gdf_filtered.set_crs(self.input_crs, inplace=True)
+                logger.debug(f"Set input CRS to {self.input_crs} for buildings data")
+            
+            # Transform to target CRS (EPSG:5243)
+            gdf_filtered = gdf_filtered.to_crs(self.target_crs)
+            logger.info(f"Transformed buildings to {self.target_crs}")
+            
+            # Add representative point to each building (now in EPSG:5243)
             if "geometry" in gdf_filtered.columns:
                 def get_representative_point_coords(geom):
                     if geom and not geom.is_empty:
@@ -212,9 +231,9 @@ class StreetProcessor:
             logger.info("Querying heat demand data for buildings...")
             gdf_filtered = self._add_heat_demand_to_buildings(gdf_filtered)
 
-            # Save to GeoJSON
+            # Save to GeoJSON (will be in EPSG:5243)
             gdf_filtered.to_file(buildings_path, driver="GeoJSON")
-            logger.info(f"Buildings with heat demand data saved to {buildings_path}")
+            logger.info(f"Buildings with heat demand data saved to {buildings_path} (CRS: {gdf_filtered.crs})")
             
             # Generate summary statistics
             heat_demand_stats = self._get_heat_demand_summary(gdf_filtered)
