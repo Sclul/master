@@ -166,38 +166,58 @@ class StreetProcessor:
         try:
             polygon = shape(geojson["geometry"])
             
-            # Get buildings from polygon
+            # Get buildings from polygon with minimal tags
             gdf = ox.features_from_polygon(polygon, tags={"building": True})
             
             if gdf.empty:
                 logger.info("No buildings found in the selected area.")
                 return {"status": "no_buildings"}
             
+            # Keep only essential columns
+            essential_columns = ['geometry', 'building']
+            
+            # Add address columns if they exist
+            address_columns = [
+                'addr:street', 'addr:housenumber', 'addr:postcode', 'addr:city'
+            ]
+            
+            # Add building use columns if they exist
+            use_columns = ['building:use', 'building:levels', ]
+            
+            # Combine all desired columns
+            desired_columns = essential_columns + address_columns + use_columns
+            
+            # Filter to only keep columns that exist in the GeoDataFrame
+            available_columns = [col for col in desired_columns if col in gdf.columns]
+            
+            # Create filtered GeoDataFrame with only essential data
+            gdf_filtered = gdf[available_columns].copy()
+            
             # Add representative point to each building
-            if "geometry" in gdf.columns:
+            if "geometry" in gdf_filtered.columns:
                 def get_representative_point_coords(geom):
                     if geom and not geom.is_empty:
                         # Ensure the geometry is valid before getting the representative point
                         if not geom.is_valid:
-                            geom = geom.buffer(0) # Attempt to fix invalid geometry
+                            geom = geom.buffer(0)  # Attempt to fix invalid geometry
                         if geom and not geom.is_empty and geom.is_valid:
                             rp = geom.representative_point()
                             return {"coordinates": [rp.x, rp.y]}
                     return None
-                gdf["representative_point"] = gdf["geometry"].apply(get_representative_point_coords)
+                gdf_filtered["representative_point"] = gdf_filtered["geometry"].apply(get_representative_point_coords)
             else:
                 logger.warning("No 'geometry' column found in buildings GeoDataFrame. Skipping representative point calculation.")
             
             # Add heat demand data automatically
             logger.info("Querying heat demand data for buildings...")
-            gdf = self._add_heat_demand_to_buildings(gdf)
+            gdf_filtered = self._add_heat_demand_to_buildings(gdf_filtered)
 
             # Save to GeoJSON
-            gdf.to_file(buildings_path, driver="GeoJSON")
+            gdf_filtered.to_file(buildings_path, driver="GeoJSON")
             logger.info(f"Buildings with heat demand data saved to {buildings_path}")
             
             # Generate summary statistics
-            heat_demand_stats = self._get_heat_demand_summary(gdf)
+            heat_demand_stats = self._get_heat_demand_summary(gdf_filtered)
             
             return {
                 "status": "saved", 
