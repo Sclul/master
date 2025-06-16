@@ -153,8 +153,8 @@ class GeospatialHandler:
                 else:
                     heat_demands.append(None)
             
-            # Add heat demand column
-            gdf[self.heat_demand_column] = heat_demands
+            # Add heat demand column with consistent name
+            gdf["heat_demand"] = heat_demands
             
             logger.info(f"Heat demand query results: {successful_queries}/{len(gdf)} buildings have heat demand data")
             
@@ -250,10 +250,10 @@ class GeospatialHandler:
     def _get_heat_demand_summary(self, gdf: gpd.GeoDataFrame) -> Dict[str, Any]:
         """Generate summary statistics for heat demand data."""
         try:
-            if self.heat_demand_column not in gdf.columns:
+            if "heat_demand" not in gdf.columns:
                 return {"message": "No heat demand data available"}
             
-            heat_data = gdf[self.heat_demand_column].dropna()
+            heat_data = gdf["heat_demand"].dropna()
             
             if len(heat_data) == 0:
                 return {"message": "No valid heat demand values found"}
