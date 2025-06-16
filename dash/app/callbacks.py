@@ -1,8 +1,9 @@
 """Dash callback functions for the application."""
 import logging
 from dash_extensions.enrich import Input, Output, no_update # type: ignore
+from dash import html # type: ignore
 
-from street_processor import StreetProcessor
+from geospatial_handler import GeospatialHandler
 
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class CallbackManager:
         """Initialize with Dash app and configuration."""
         self.app = app
         self.config = config
-        self.street_processor = StreetProcessor(config)  # Pass config object, not config.config
+        self.geospatial_handler = GeospatialHandler(config)
         self.data_paths = config.data_paths
         
         # Register callbacks
@@ -32,36 +33,60 @@ class CallbackManager:
                 logger.debug(f"Polygon coordinates: {coordinates}")
                 
                 # Create GeoJSON from coordinates
-                geojson = self.street_processor.create_geojson_from_coordinates(coordinates)
-                
+                geojson = self.geospatial_handler.create_geojson_from_coordinates(coordinates)
                 # Save polygon
-                self.street_processor.save_polygon(geojson, self.data_paths["polygon_path"])
-                
+                self.geospatial_handler.save_polygon(geojson, self.data_paths["polygon_path"])
+
                 # Process streets and return status
-                streets_status = self.street_processor.process_streets_from_polygon(
-                    geojson, 
+                streets_status = self.geospatial_handler.process_streets_from_polygon(
+                    geojson,
                     self.data_paths["streets_path"]
                 )
                 
                 # Process buildings
-                buildings_status = self.street_processor.process_buildings_from_polygon(
+                buildings_status = self.geospatial_handler.process_buildings_from_polygon(
                     geojson,
                     self.data_paths["buildings_path"]
                 )
                 logger.info(f"Building processing status: {buildings_status}")
                 
-                return streets_status # The main status returned to update_log is still from streets
+                return {"streets": streets_status, "buildings": buildings_status}
             
             return no_update
         
         @self.app.callback(Output("log", "children"), Input("geojson-saved", "data"))
-        def update_log(status):
+        def update_log(status_data):
             """Update log display based on processing status."""
-            if status is not None and isinstance(status, dict):
-                if status.get("status") == "no_streets":
-                    return "No streets found in the selected area."
-                if status.get("status") == "error":
-                    return f"Error: {status.get('message')}"
+            if status_data is not None and isinstance(status_data, dict):
+                streets_status = status_data.get("streets", {})
+                buildings_status = status_data.get("buildings", {})
+                
+                messages = []
+                
+                # Check streets status
+                if streets_status.get("status") == "no_streets":
+                    messages.append("❌ No streets found in the selected area.")
+                elif streets_status.get("status") == "error":
+                    messages.append(f"❌ Streets error: {streets_status.get('message')}")
+                elif streets_status.get("status") == "saved":
+                    messages.append("✅ Streets processed successfully")
+                
+                # Check buildings status
+                if buildings_status.get("status") == "no_buildings":
+                    messages.append("❌ No buildings found in the selected area.")
+                elif buildings_status.get("status") == "error":
+                    messages.append(f"❌ Buildings error: {buildings_status.get('message')}")
+                elif buildings_status.get("status") == "saved":
+                    messages.append("✅ Buildings processed successfully")
+                    
+                    # Add heat demand statistics if available
+                    heat_stats = buildings_status.get("heat_demand_stats", {})
+                    if isinstance(heat_stats, dict) and "total_buildings" in heat_stats:
+                        messages.append(f"📊 Heat demand data: {heat_stats['buildings_with_data']}/{heat_stats['total_buildings']} buildings ({heat_stats['coverage_percentage']}% coverage)")
+                        if heat_stats.get("total_heat_demand"):
+                            messages.append(f"🔥 Total heat demand: {heat_stats['total_heat_demand']} kWh")
+                
+                
+                return [html.Div(message) for message in messages] if messages else "Processing completed"
             
-            # Load and display streets data
-            return self.street_processor.load_streets_data(self.data_paths["streets_path"])
+            return "Ready to process polygon data"

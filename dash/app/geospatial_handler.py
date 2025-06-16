@@ -1,4 +1,4 @@
-"""Street processing functionality using OSMnx."""
+"""Geospatial data handling functionality using OSMnx and GeoPandas."""
 import json
 import logging
 from typing import Dict, Any, Optional
@@ -13,8 +13,8 @@ from shapely.geometry import mapping # type: ignore
 logger = logging.getLogger(__name__)
 
 
-class StreetProcessor:
-    """Handles OSM street data processing and conversion."""
+class GeospatialHandler:
+    """Handles OSM data extraction, coordinate transformations, and heat demand queries."""
     
     def __init__(self, config):
         """Initialize with configuration."""
