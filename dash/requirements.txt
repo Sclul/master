@@ -1,6 +1,9 @@
 dash
 dash-leaflet
+dash-extensions
 osmnx
 shapely
 fiona
 geopandas
+pyyaml
+plotly

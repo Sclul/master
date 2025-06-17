@@ -1,7 +1,7 @@
 """Geospatial data handling functionality using OSMnx and GeoPandas."""
 import json
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union
 
 import osmnx as ox # type: ignore
 import geopandas as gpd # type: ignore
@@ -32,13 +32,23 @@ class GeospatialHandler:
         self.target_crs = crs_config.get("target_crs", "EPSG:5243")
         self.input_crs = crs_config.get("input_crs", "EPSG:4326")
     
-    def create_geojson_from_coordinates(self, coordinates: list) -> Dict[str, Any]:
+    def create_geojson_from_coordinates(self, coordinates: Union[Dict, List]) -> Dict[str, Any]:
         """Create GeoJSON feature from coordinates."""
+        # Handle the specific format: {"coordinates": [[lng, lat], [lng, lat], ...]}
+        if isinstance(coordinates, dict) and "coordinates" in coordinates:
+            coord_list = coordinates["coordinates"]
+        else:
+            coord_list = coordinates
+        
+        # Ensure polygon is closed
+        if len(coord_list) > 0 and coord_list[0] != coord_list[-1]:
+            coord_list.append(coord_list[0])
+        
         return {
             "type": "Feature",
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [coordinates],
+                "coordinates": [coord_list],  # Note: single array wrap for exterior ring
             },
             "properties": {},
         }
@@ -50,12 +60,7 @@ class GeospatialHandler:
         logger.debug(f"Polygon saved to {polygon_path}")
     
     def process_streets_from_polygon(self, geojson: Dict[str, Any], streets_path: str) -> Dict[str, str]:
-        """
-        Process streets from polygon and save to file.
-        
-        Returns:
-            Dict with status and optional message
-        """
+        """Process streets from polygon and save to file."""
         try:
             polygon = shape(geojson["geometry"])
             
@@ -90,10 +95,7 @@ class GeospatialHandler:
             return {"status": "error", "message": str(e)}
     
     def _get_heat_demand_at_point(self, rep_point_coords: list, gdb_layer_crs: Any) -> Optional[float]:
-        """
-        Query GDB for heat demand value at a representative point.
-        rep_point_coords: [x, y] coordinates in EPSG:5243
-        """
+        """Query GDB for heat demand value at a representative point."""
         try:
             # Create Point geometry from coordinates (already in EPSG:5243)
             point_geom = Point(rep_point_coords[0], rep_point_coords[1])
@@ -166,13 +168,7 @@ class GeospatialHandler:
             return gdf
     
     def process_buildings_from_polygon(self, geojson: Dict[str, Any], buildings_path: str) -> Dict[str, str]:
-        """
-        Process buildings from polygon and save to file.
-        Automatically adds heat demand data from GDB.
-        
-        Returns:
-            Dict with status and optional message
-        """
+        """Process buildings from polygon and save to file."""
         try:
             polygon = shape(geojson["geometry"])
             
@@ -225,7 +221,7 @@ class GeospatialHandler:
                     return None
                 gdf_filtered["representative_point"] = gdf_filtered["geometry"].apply(get_representative_point_coords)
             else:
-                logger.warning("No 'geometry' column found in buildings GeoDataFrame. Skipping representative point calculation.")
+                logger.warning("No 'geometry' column found in buildings GeoDataFrame.")
             
             # Add heat demand data automatically
             logger.info("Querying heat demand data for buildings...")
@@ -294,12 +290,7 @@ class GeospatialHandler:
         return G_undirected
     
     def load_streets_data(self, streets_path: str) -> Optional[str]:
-        """
-        Load streets data from file for display.
-        
-        Returns:
-            JSON string of the data or error message
-        """
+        """Load streets data from file for display."""
         try:
             with open(streets_path, "r") as f:
                 data = json.load(f)
@@ -310,12 +301,7 @@ class GeospatialHandler:
             return f"Error reading {streets_path}: {e}"
     
     def load_buildings_data(self, buildings_path: str) -> Optional[str]:
-        """
-        Load buildings data from file for display.
-        
-        Returns:
-            JSON string of the data or error message
-        """
+        """Load buildings data from file for display."""
         try:
             with open(buildings_path, "r") as f:
                 data = json.load(f)
