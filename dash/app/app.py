@@ -1,42 +1,57 @@
-"""Main application entry point for the Dash OSM Street Processor."""
+"""Main Dash application entry point."""
 import logging
-from dash_extensions.enrich import DashProxy # type: ignore
+from dash_extensions.enrich import DashProxy, MultiplexerTransform # type: ignore
 
 from config import Config
-from layout import create_layout
-from callbacks import CallbackManager
+from layout.main_layout import create_layout
+from callbacks.callback_manager import CallbackManager
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 def create_app():
     """Create and configure the Dash application."""
-    # Initialize configuration
-    config = Config()
-    
-    logger = logging.getLogger(__name__)
-    logger.info("Starting Dash OSM Street Processor")
-    
-    # Create Dash app
-    app = DashProxy()
-    logger.info("DashProxy app created")
-    
-    # Set layout
-    app.layout = create_layout()
-    logger.info("App layout set")
-    
-    # Register callbacks
-    CallbackManager(app, config)
-    logger.info("Callbacks registered")
-    
-    return app, config
+    try:
+        # Load configuration
+        config = Config()
+        logger.info("Configuration loaded successfully")
+        
+        # Create Dash app
+        app = DashProxy(
+            __name__,
+            transforms=[MultiplexerTransform()],
+            suppress_callback_exceptions=True
+        )
+        
+        # Set layout
+        app.layout = create_layout(config)
+        logger.info("App layout configured")
+        
+        # Initialize callbacks
+        callback_manager = CallbackManager(app, config)
+        logger.info("Callbacks initialized")
+        
+        return app
+        
+    except Exception as e:
+        logger.error(f"Failed to create app: {e}")
+        raise
 
-if __name__ == '__main__':
-    app, config = create_app()
-    
-    logger = logging.getLogger(__name__)
-    logger.info("Running app")
+
+# Create the app instance
+app = create_app()
+
+if __name__ == "__main__":
+    config = Config()
+    server_settings = config.server_settings
     
     app.run(
-        debug=config.server_settings["debug"], 
-        host=config.server_settings["host"], 
-        port=config.server_settings["port"]
+        host=server_settings["host"],
+        port=server_settings["port"],
+        debug=server_settings["debug"]
     )

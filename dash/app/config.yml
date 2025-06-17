@@ -18,21 +18,22 @@ server_settings:
 
 # Paths for data files
 data_paths:
-  output_directory: "./data" # Directory where GeoJSON files will be saved
-  polygon_geojson: "polygon.geojson" # Filename for the drawn polygon
-  streets_geojson: "streets.geojson" # Filename for the processed streets
-  buildings_geojson: "buildings.geojson" # Filename for the processed buildings
+  data_dir: "./data"
+  polygon_path: "./data/polygon.geojson"
+  streets_path: "./data/streets.geojson"
+  buildings_path: "./data/buildings.geojson"
+  filtered_buildings_path: "./data/filtered_buildings.geojson"
 
 # Heat demand configuration
 heat_demand:
-  gdb_path: "/gdb/GDB.gdb"
-  gdb_layer: "Raumwaermebedarf_ist"
-  heat_demand_column: "RW"
+  gdb_path: "/gdb/GDB.gdb"  # Path to GeoDatabase file
+  gdb_layer: "Raumwaermebedarf_ist"  # Layer name in GDB containing heat demand data
+  heat_demand_column: "RW"  # Column name for heat demand values
 
 # Coordinate Reference System
 coordinate_system:
-  target_crs: "EPSG:5243"  # ETRS89 / LCC Germany
-  input_crs: "EPSG:4326"   # WGS84 (for OSM data)
+  target_crs: "EPSG:5243"  # ETRS89 / LCC Germany (for calculations)
+  input_crs: "EPSG:4326"   # WGS84 (for OSM data input)
 
 # Map display settings
 map_settings:
@@ -46,3 +47,10 @@ map_settings:
     primary_area_unit: "sqmeters"
     active_color: "blue"
     completed_color: "rgba(0, 0, 255, 0.6)"
+
+# Building filter configuration
+building_filters:
+  exclude_zero_heat_demand: true  # Remove buildings with zero/null heat demand
+  postcodes: [""]  # Include only these postcodes (empty = all postcodes)
+  cities: [""]     # Include only these cities (empty = all cities) 
+  building_uses: ["commercial"]  # EXCLUDE these building uses from results

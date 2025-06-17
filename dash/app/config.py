@@ -23,10 +23,11 @@ class Config:
             "debug": True,
         },
         "data_paths": {
-            "output_directory": "./data",
-            "polygon_geojson": "polygon.geojson",
-            "streets_geojson": "streets.geojson",
-            "buildings_geojson": "buildings.geojson",
+            "data_dir": "./data",
+            "polygon_path": "./data/polygon.geojson",
+            "streets_path": "./data/streets.geojson",
+            "buildings_path": "./data/buildings.geojson",
+            "filtered_buildings_path": "./data/filtered_buildings.geojson",
         },
         "heat_demand": {
             "gdb_path": "/gdb/GDB.gdb",
@@ -49,6 +50,12 @@ class Config:
         "coordinate_system": {
             "target_crs": "EPSG:5243",
             "input_crs": "EPSG:4326"
+        },
+        "building_filters": {
+            "exclude_zero_heat_demand": True,
+            "postcodes": ["50670"],
+            "cities": ["Köln"],
+            "building_uses": ["residential"]
         }
     }
     
@@ -85,10 +92,14 @@ class Config:
     
     def _setup_paths(self):
         """Set up data paths and ensure directories exist."""
-        self.data_dir = self.config["data_paths"]["output_directory"]
-        self.polygon_path = os.path.join(self.data_dir, self.config["data_paths"]["polygon_geojson"])
-        self.streets_path = os.path.join(self.data_dir, self.config["data_paths"]["streets_geojson"])
-        self.buildings_path = os.path.join(self.data_dir, self.config["data_paths"]["buildings_geojson"])
+        # Use 'data_dir' from YAML config, which matches the YAML structure
+        self.data_dir = self.config["data_paths"]["data_dir"]
+        
+        # Build paths using the direct path values from YAML
+        self.polygon_path = self.config["data_paths"]["polygon_path"]
+        self.streets_path = self.config["data_paths"]["streets_path"]
+        self.buildings_path = self.config["data_paths"]["buildings_path"]
+        self.filtered_buildings_path = self.config["data_paths"]["filtered_buildings_path"]
         
         # Ensure data directory exists
         os.makedirs(self.data_dir, exist_ok=True)
@@ -121,7 +132,8 @@ class Config:
             "data_dir": self.data_dir,
             "polygon_path": self.polygon_path,
             "streets_path": self.streets_path,
-            "buildings_path": self.buildings_path
+            "buildings_path": self.buildings_path,
+            "filtered_buildings_path": self.filtered_buildings_path
         }
     
     @property
@@ -140,4 +152,14 @@ class Config:
         return self.config.get("coordinate_system", {
             "target_crs": "EPSG:5243",
             "input_crs": "EPSG:4326"
+        })
+    
+    @property
+    def building_filters(self) -> Dict[str, Any]:
+        """Get building filters from config."""
+        return self.config.get("building_filters", {
+            "exclude_zero_heat_demand": True,
+            "postcodes": ["50670"],
+            "cities": ["Köln"],
+            "building_uses": ["residential"]
         })
