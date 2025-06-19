@@ -17,8 +17,7 @@ class BuildingFilter:
         """Initialize with configuration."""
         self.config = config
         self.data_paths = config.data_paths
-        heat_config = config.heat_demand
-        self.heat_demand_column = heat_config.get("heat_demand_column", "heat_demand")
+        self.heat_demand_column = "heat_demand" 
         
     def load_geospatial_data(self) -> Tuple[Optional[gpd.GeoDataFrame], Optional[gpd.GeoDataFrame]]:
         """Load buildings and streets data from saved files."""
@@ -63,7 +62,7 @@ class BuildingFilter:
                 mask = (filtered_gdf[self.heat_demand_column].notna()) & \
                        (filtered_gdf[self.heat_demand_column] != 0)
                 filtered_gdf = filtered_gdf[mask]
-                logger.info(f"Filtered out {original_count - len(filtered_gdf)} buildings with zero/null heat demand")
+                logger.info(f"After zero/null exclusion: {len(filtered_gdf)} buildings remaining")
             else:
                 logger.warning(f"Heat demand column '{self.heat_demand_column}' not found in buildings data")
         
@@ -73,16 +72,16 @@ class BuildingFilter:
         if min_heat_demand is not None or max_heat_demand is not None:
             if self.heat_demand_column in filtered_gdf.columns:
                 if min_heat_demand is not None:
-                    mask = (filtered_gdf[self.heat_demand_column].isna()) | \
+                    mask = (filtered_gdf[self.heat_demand_column].notna()) & \
                            (filtered_gdf[self.heat_demand_column] >= min_heat_demand)
                     filtered_gdf = filtered_gdf[mask]
-                    logger.info(f"Filtered buildings with heat demand >= {min_heat_demand}")
+                    logger.info(f"After min heat demand filter (>= {min_heat_demand}): {len(filtered_gdf)} buildings")
                 
                 if max_heat_demand is not None:
-                    mask = (filtered_gdf[self.heat_demand_column].isna()) | \
+                    mask = (filtered_gdf[self.heat_demand_column].notna()) & \
                            (filtered_gdf[self.heat_demand_column] <= max_heat_demand)
                     filtered_gdf = filtered_gdf[mask]
-                    logger.info(f"Filtered buildings with heat demand <= {max_heat_demand}")
+                    logger.info(f"After max heat demand filter (<= {max_heat_demand}): {len(filtered_gdf)} buildings")
         
         # Filter by building type - EXCLUDE specified types
         building_types = filter_criteria.get("building_types", [])
@@ -184,7 +183,6 @@ class BuildingFilter:
             filtered_buildings_gdf.to_file(output_path, driver="GeoJSON")
             
             logger.info(f"Filtered buildings saved to {output_path} (CRS: {filtered_buildings_gdf.crs})")
-            logger.info(f"Columns preserved: {list(filtered_buildings_gdf.columns)}")
             
             return {
                 "status": "saved",
