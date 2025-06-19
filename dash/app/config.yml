@@ -51,6 +51,7 @@ map_settings:
 # Building filter configuration
 building_filters:
   exclude_zero_heat_demand: true  # Remove buildings with zero/null heat demand
+  min_heat_demand: 0.1  # Minimum heat demand threshold (excludes 0.0 values)
   postcodes: [""]  # Include only these postcodes (empty = all postcodes)
   cities: [""]     # Include only these cities (empty = all cities) 
   building_uses: ["commercial"]  # EXCLUDE these building uses from results
