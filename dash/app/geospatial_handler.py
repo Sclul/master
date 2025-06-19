@@ -2,6 +2,7 @@
 import json
 import logging
 from typing import Dict, Any, Optional, List, Union
+from pathlib import Path
 
 import osmnx as ox # type: ignore
 import geopandas as gpd # type: ignore
@@ -31,6 +32,31 @@ class GeospatialHandler:
         crs_config = config.coordinate_system
         self.target_crs = crs_config.get("target_crs", "EPSG:5243")
         self.input_crs = crs_config.get("input_crs", "EPSG:4326")
+        
+        # Data directory path
+        self.data_dir = Path(config.data_paths.get("data_dir", "data"))
+        
+        
+    def clear_data_directory(self) -> Dict[str, Any]:
+        """Clear all files in the data directory."""
+        try:
+            if self.data_dir.exists():
+                # Remove all files
+                for item in self.data_dir.iterdir():
+                    if item.is_file():
+                        item.unlink()
+                        logger.debug(f"Removed file: {item}")
+
+                
+                logger.info(f"Data directory cleared: {self.data_dir}")
+                return {"status": "success", "message": f"Data directory {self.data_dir} cleared"}
+            else:
+                logger.info(f"Data directory does not exist: {self.data_dir}")
+                return {"status": "info", "message": f"Data directory {self.data_dir} does not exist"}
+        except Exception as e:
+            logger.error(f"Error clearing data directory: {e}")
+            return {"status": "error", "message": str(e)}
+               
     
     def create_geojson_from_coordinates(self, coordinates: Union[Dict, List]) -> Dict[str, Any]:
         """Create GeoJSON feature from coordinates."""

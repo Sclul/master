@@ -35,6 +35,8 @@ class GeospatialCallbacks(BaseCallback):
             try:
                 logger.info("Processing polygon coordinates from map")
                 
+                self.geospatial_handler.clear_data_directory()
+
                 # Create GeoJSON from coordinates
                 geojson = self.geospatial_handler.create_geojson_from_coordinates(coords)
                 
