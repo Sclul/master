@@ -1,11 +1,8 @@
-pytesten
-notebook
-dash/app/cache
-dash/app/assets/dashExtensions_default.js
-dash/app/data
-dash/app/__pycache__
-dash/app/callbacks/__pycache__
-dash/app/layout/__pycache__
+app/cache
+app/assets/dashExtensions_default.js
+app/data
+app/__pycache__
+app/callbacks/__pycache__
+app/layout/__pycache__
 
-# Keep the templates directory but ignore any compiled templates
-dash/app/templates/*.compiled
+app/templates/*.compiled
