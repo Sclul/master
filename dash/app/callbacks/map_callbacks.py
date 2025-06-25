@@ -3,7 +3,7 @@ import logging
 import json
 import geopandas as gpd # type: ignore
 import dash_leaflet as dl # type: ignore
-from dash_extensions.enrich import Input, Output # type: ignore
+from dash_extensions.enrich import Input, Output, State # type: ignore
 
 from .base_callback import BaseCallback
 
@@ -17,34 +17,43 @@ class MapCallbacks(BaseCallback):
         """Register map-related callbacks."""
         
         @self.app.callback(
-            [Output("data-layers", "children"), Output("layer-toggles", "value")],
-            [Input("layer-toggles", "value"), Input("filtered-buildings", "data")],
+            Output("data-layers", "children"),
+            Input("layer-toggles", "value"),
         )
-        def update_map_layers(selected_layers, filtered_buildings_data):
-            """Update map layers based on toggle states and refresh filtered buildings layer when updated."""
+        def update_map_layers(selected_layers):
+            """Update map layers based on toggle states."""
             if selected_layers is None:
                 selected_layers = []
             
-            # Check if we need to auto-enable filtered layer
-            auto_enable_filtered = False
-            if filtered_buildings_data and isinstance(filtered_buildings_data, dict):
-                if filtered_buildings_data.get("filter_applied") and filtered_buildings_data.get("status") == "saved":
-                    auto_enable_filtered = True
-                    logger.info("Auto-enabling filtered buildings layer after successful filter application")
-            
-            # Update selected layers if auto-enabling
-            updated_selected_layers = selected_layers.copy() if selected_layers else []
-            if auto_enable_filtered and "filtered" not in updated_selected_layers:
-                updated_selected_layers.append("filtered")
-            
-            show_streets = "streets" in updated_selected_layers
-            show_buildings = "buildings" in updated_selected_layers
-            show_filtered = "filtered" in updated_selected_layers
+            show_streets = "streets" in selected_layers
+            show_buildings = "buildings" in selected_layers
+            show_filtered = "filtered" in selected_layers
             
             logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}")
             
             layers = self._build_data_layers(show_streets, show_buildings, show_filtered)
-            return layers, updated_selected_layers
+            return layers
+
+        @self.app.callback(
+            Output("layer-toggles", "value"),
+            Input("filtered-buildings", "data"),
+            State("layer-toggles", "value"),
+            prevent_initial_call=True
+        )
+        def auto_enable_filtered_layer(filtered_buildings_data, current_selected_layers):
+            """Auto-enable filtered buildings layer when filters are applied."""
+            if not filtered_buildings_data or not isinstance(filtered_buildings_data, dict):
+                return current_selected_layers or []
+            
+            # Only auto-enable if filters were just applied successfully
+            if filtered_buildings_data.get("filter_applied") and filtered_buildings_data.get("status") == "saved":
+                updated_layers = (current_selected_layers or []).copy()
+                if "filtered" not in updated_layers:
+                    updated_layers.append("filtered")
+                    logger.info("Auto-enabling filtered buildings layer after successful filter application")
+                    return updated_layers
+            
+            return current_selected_layers or []
 
         @self.app.callback(
             Output("map-zoom-info", "children"),

@@ -18,6 +18,10 @@ def create_control_panel(config=None):
     return html.Div([
         html.H3("Controls"),
         
+        # Apply filters button at the top
+        html.Button("Apply Filters", id="apply-filters-btn", className="btn-primary"),
+        html.Div(id="filter-status"),
+        
         # Building filters - heat demand controls
         html.Section([
             html.H4("Heat Demand Filters"),
@@ -40,7 +44,7 @@ def create_control_panel(config=None):
                     type="number",
                     placeholder="Enter minimum heat demand",
                     value=default_min_heat,
-                    step=1000,
+                    step=1,
                     min=0,
                     className="number-input"
                 )
@@ -54,15 +58,66 @@ def create_control_panel(config=None):
                     type="number",
                     placeholder="Enter maximum heat demand",
                     value=default_max_heat,
-                    step=1000,
+                    step=1,
                     min=0,
                     className="number-input"
                 )
             ], className="filter-row"),
             
-            html.Button("Apply Filters", id="apply-filters-btn", className="btn-primary"),
-            html.Div(id="filter-status")
         ], className="filter-section"),
+        
+        # Building attribute filters
+        html.Section([
+            html.H4("Building Attribute Filters"),
+            
+            # Street filter
+            html.Div([
+                html.Label("Street:", className="filter-label"),
+                dcc.Dropdown(
+                    id="street-filter",
+                    placeholder="Select streets...",
+                    multi=True,
+                    className="dropdown-filter"
+                )
+            ], className="filter-row"),
+            
+            # Postcode filter
+            html.Div([
+                html.Label("Postcode:", className="filter-label"),
+                dcc.Dropdown(
+                    id="postcode-filter",
+                    placeholder="Select postcodes...",
+                    multi=True,
+                    className="dropdown-filter"
+                )
+            ], className="filter-row"),
+            
+            # City filter
+            html.Div([
+                html.Label("City:", className="filter-label"),
+                dcc.Dropdown(
+                    id="city-filter",
+                    placeholder="Select cities...",
+                    multi=True,
+                    className="dropdown-filter"
+                )
+            ], className="filter-row"),
+            
+            # Building use filter
+            html.Div([
+                html.Label("Building Use:", className="filter-label"),
+                dcc.Dropdown(
+                    id="building-use-filter",
+                    placeholder="Select building uses...",
+                    multi=True,
+                    className="dropdown-filter"
+                )
+            ], className="filter-row"),
+            
+        ], className="filter-section"),
+        
+        # Hidden store for filter options
+        dcc.Store(id="filter-options-store")
         
     ], className="control-panel-content")
 
