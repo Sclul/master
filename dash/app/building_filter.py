@@ -69,88 +69,85 @@ class BuildingFilter:
         # Filter by heat demand range
         min_heat_demand = filter_criteria.get("min_heat_demand")
         max_heat_demand = filter_criteria.get("max_heat_demand")
-        if min_heat_demand is not None or max_heat_demand is not None:
+        
+        # Apply min heat demand filter (only if greater than 0)
+        if min_heat_demand is not None and min_heat_demand > 0:
             if self.heat_demand_column in filtered_gdf.columns:
-                if min_heat_demand is not None:
-                    mask = (filtered_gdf[self.heat_demand_column].notna()) & \
-                           (filtered_gdf[self.heat_demand_column] >= min_heat_demand)
-                    filtered_gdf = filtered_gdf[mask]
-                    logger.info(f"After min heat demand filter (>= {min_heat_demand}): {len(filtered_gdf)} buildings")
-                
-                if max_heat_demand is not None:
-                    mask = (filtered_gdf[self.heat_demand_column].notna()) & \
-                           (filtered_gdf[self.heat_demand_column] <= max_heat_demand)
-                    filtered_gdf = filtered_gdf[mask]
-                    logger.info(f"After max heat demand filter (<= {max_heat_demand}): {len(filtered_gdf)} buildings")
+                mask = (filtered_gdf[self.heat_demand_column].notna()) & \
+                       (filtered_gdf[self.heat_demand_column] >= min_heat_demand)
+                filtered_gdf = filtered_gdf[mask]
+                logger.info(f"After min heat demand filter (>= {min_heat_demand}): {len(filtered_gdf)} buildings")
         
-        # Filter by building type - EXCLUDE specified types
-        building_types = filter_criteria.get("building_types", [])
-        if building_types:
-            if "building" in filtered_gdf.columns:
-                def should_exclude_building_type(building_value, exclude_types):
-                    if pd.isna(building_value):
-                        return False  # Keep buildings with no specific type
-                    building_str = str(building_value).lower()
-                    return any(btype.lower() in building_str for btype in exclude_types)
-                
-                # Keep buildings that should NOT be excluded
-                type_mask = ~filtered_gdf["building"].apply(
-                    lambda x: should_exclude_building_type(x, building_types)
-                )
-                filtered_gdf = filtered_gdf[type_mask]
-                logger.info(f"Excluded buildings by type: {building_types}. Remaining: {len(filtered_gdf)}")
+        # Apply max heat demand filter (only if not infinity)
+        if max_heat_demand is not None and max_heat_demand != float('inf'):
+            if self.heat_demand_column in filtered_gdf.columns:
+                mask = (filtered_gdf[self.heat_demand_column].notna()) & \
+                       (filtered_gdf[self.heat_demand_column] <= max_heat_demand)
+                filtered_gdf = filtered_gdf[mask]
+                logger.info(f"After max heat demand filter (<= {max_heat_demand}): {len(filtered_gdf)} buildings")
         
-        # Filter by building use - EXCLUDE specified uses
+        # Filter by building use - INCLUDE only specified uses (skip if empty)
         building_uses = filter_criteria.get("building_uses", [])
-        if building_uses:
+        if building_uses and len(building_uses) > 0 and any(use for use in building_uses if use):
             if "building:use" in filtered_gdf.columns:
-                def should_exclude_building_use(use_value, exclude_uses):
+                def should_include_building_use(use_value, include_uses):
+                    # Handle "null" selection - include buildings with no specific use
+                    if "null" in include_uses and pd.isna(use_value):
+                        return True
+                    
+                    # Handle regular use values
                     if pd.isna(use_value):
-                        return False  # Keep buildings with no specific use
+                        return False  # Exclude buildings with no specific use if "null" not selected
+                    
                     building_use_list = [use.strip().lower() for use in str(use_value).split(';')]
-                    return any(use.lower() in building_use_list for use in exclude_uses)
+                    return any(iuse.lower() in building_use_list for iuse in include_uses if iuse != "null")
                 
-                # Keep buildings that should NOT be excluded
-                use_mask = ~filtered_gdf["building:use"].apply(
-                    lambda x: should_exclude_building_use(x, building_uses)
+                # Keep buildings that should be included
+                use_mask = filtered_gdf["building:use"].apply(
+                    lambda x: should_include_building_use(x, building_uses)
                 )
                 filtered_gdf = filtered_gdf[use_mask]
-                logger.info(f"Excluded buildings by use: {building_uses}. Remaining: {len(filtered_gdf)}")
+                logger.info(f"Included buildings by use: {building_uses}. Remaining: {len(filtered_gdf)}")
             else:
                 logger.warning("Column 'building:use' not found in buildings data")
+        else:
+            logger.info("No building use filter applied - including all building uses")
         
-        # Filter by postcodes - INCLUDE only specified postcodes
+        # Filter by postcodes - INCLUDE only specified postcodes (skip if empty)
         postcodes = filter_criteria.get("postcodes", [])
-        if postcodes and any(pc for pc in postcodes if pc):
+        if postcodes and len(postcodes) > 0 and any(pc for pc in postcodes if pc):
             if "addr:postcode" in filtered_gdf.columns:
-                postcode_mask = (filtered_gdf["addr:postcode"].isna()) | \
-                               (filtered_gdf["addr:postcode"].isin(postcodes))
+                postcode_mask = filtered_gdf["addr:postcode"].isin(postcodes)
                 filtered_gdf = filtered_gdf[postcode_mask]
                 logger.info(f"Filtered buildings by postcodes: {postcodes}. Remaining: {len(filtered_gdf)}")
             else:
                 logger.warning("Column 'addr:postcode' not found in buildings data")
+        else:
+            logger.info("No postcode filter applied - including all postcodes")
         
-        # Filter by cities - INCLUDE only specified cities
+        # Filter by cities - INCLUDE only specified cities (skip if empty)
         cities = filter_criteria.get("cities", [])
-        if cities and any(city for city in cities if city):
+        if cities and len(cities) > 0 and any(city for city in cities if city):
             if "addr:city" in filtered_gdf.columns:
-                city_mask = (filtered_gdf["addr:city"].isna()) | \
-                           (filtered_gdf["addr:city"].isin(cities))
+                city_mask = filtered_gdf["addr:city"].isin(cities)
                 filtered_gdf = filtered_gdf[city_mask]
                 logger.info(f"Filtered buildings by cities: {cities}. Remaining: {len(filtered_gdf)}")
             else:
                 logger.warning("Column 'addr:city' not found in buildings data")
+        else:
+            logger.info("No city filter applied - including all cities")
         
-        # Filter by streets - INCLUDE only specified streets
+        # Filter by streets - INCLUDE only specified streets (skip if empty)
         streets = filter_criteria.get("streets", [])
-        if streets and any(street for street in streets if street):
+        if streets and len(streets) > 0 and any(street for street in streets if street):
             if "addr:street" in filtered_gdf.columns:
-                street_mask = (filtered_gdf["addr:street"].isna()) | \
-                             (filtered_gdf["addr:street"].isin(streets))
+                street_mask = filtered_gdf["addr:street"].isin(streets)
                 filtered_gdf = filtered_gdf[street_mask]
                 logger.info(f"Filtered buildings by streets: {streets}. Remaining: {len(filtered_gdf)}")
             else:
                 logger.warning("Column 'addr:street' not found in buildings data")
+        else:
+            logger.info("No street filter applied - including all streets")
         
         logger.info(f"Building filtering complete: {original_count} -> {len(filtered_gdf)} buildings")
         return filtered_gdf
@@ -224,17 +221,26 @@ class BuildingFilter:
         
         options = {}
         
-        # Building types
-        if "building" in buildings_gdf.columns:
-            options["building_types"] = self.get_unique_values(buildings_gdf, "building")
-        
         # Building uses
         if "building:use" in buildings_gdf.columns:
             uses = set()
+            has_null_values = False
+            
+            # Check for null/empty values
+            if buildings_gdf["building:use"].isna().any():
+                has_null_values = True
+            
+            # Collect non-null values
             for use_value in buildings_gdf["building:use"].dropna():
                 if pd.notna(use_value):
                     uses.update([use.strip() for use in str(use_value).split(';')])
-            options["building_uses"] = sorted(list(uses))
+            
+            # Create sorted list and add null option if there are null values
+            use_list = sorted(list(uses))
+            if has_null_values:
+                use_list.insert(0, "null")  # Add null at the beginning
+            
+            options["building_uses"] = use_list
         
         # Postcodes
         if "addr:postcode" in buildings_gdf.columns:

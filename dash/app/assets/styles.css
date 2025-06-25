@@ -306,6 +306,90 @@ button {
     gap: 1rem;
 }
 
+/* ===== DROPDOWN FILTER STYLES ===== */
+.dropdown-filter {
+    margin-bottom: 0.5rem;
+}
+
+.dropdown-filter .Select-control {
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+    background: white;
+    min-height: 42px;
+    transition: border-color 0.3s ease;
+}
+
+.dropdown-filter .Select-control:hover {
+    border-color: #cbd5e0;
+}
+
+.dropdown-filter .Select--is-focused .Select-control {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.dropdown-filter .Select-placeholder {
+    color: #a0aec0;
+    font-size: 0.9rem;
+}
+
+.dropdown-filter .Select-value-label {
+    color: #2d3748;
+    font-size: 0.9rem;
+}
+
+.dropdown-filter .Select-menu-outer {
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+}
+
+.dropdown-filter .Select-option {
+    padding: 0.75rem;
+    font-size: 0.9rem;
+    color: #2d3748;
+    transition: all 0.2s ease;
+}
+
+.dropdown-filter .Select-option:hover {
+    background-color: #f7fafc;
+    color: #667eea;
+}
+
+.dropdown-filter .Select-option.is-focused {
+    background-color: #edf2f7;
+    color: #667eea;
+}
+
+.dropdown-filter .Select-option.is-selected {
+    background-color: #667eea;
+    color: white;
+}
+
+.dropdown-filter .Select-multi-value-wrapper {
+    padding: 0.25rem;
+}
+
+.dropdown-filter .Select-value {
+    background-color: #667eea;
+    color: white;
+    border-radius: 4px;
+    margin: 0.125rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+}
+
+.dropdown-filter .Select-value-icon {
+    color: rgba(255, 255, 255, 0.7);
+    padding-left: 0.25rem;
+}
+
+.dropdown-filter .Select-value-icon:hover {
+    color: white;
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
 /* ===== RESPONSIVE DESIGN ===== */
 @media (max-width: 1200px) {
     .main-content {
