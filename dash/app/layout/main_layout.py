@@ -18,7 +18,7 @@ def create_layout(config=None):
         html.Main([
             # Control panel - simplified
             html.Aside([
-                create_control_panel()
+                create_control_panel(config)
             ], className="control-panel"),
             
             # Map and status panel

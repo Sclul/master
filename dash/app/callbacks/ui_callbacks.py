@@ -1,7 +1,7 @@
 """Callbacks for UI updates and status displays."""
 import logging
 from dash_extensions.enrich import Input, Output, no_update # type: ignore
-from dash import html
+from dash import html, dcc
 
 from .base_callback import BaseCallback
 
@@ -27,20 +27,27 @@ class UICallbacks(BaseCallback):
         
         @self.app.callback(
             Output("filter-status", "children"),
-            Input("filtered-buildings", "data")
+            Input("filtered-buildings", "data"),
+            prevent_initial_call=True
         )
         def update_filter_status(filter_data):
             """Update building filter status display."""
             if filter_data and isinstance(filter_data, dict):
                 if filter_data.get("status") == "saved":
-                    return html.Div("✅ Building filters applied successfully", className="success-message")
+                    return ""  # No success message
                 elif filter_data.get("status") == "error":
-                    return html.Div(f"❌ Filter error: {filter_data.get('message')}", className="error-message")
+                    return html.Div(
+                        f"❌ Filter error: {filter_data.get('message')}", 
+                        className="error-message"
+                    )
                 elif filter_data.get("status") == "empty":
-                    return html.Div("⚠️ No buildings match the current filters", className="warning-message")
+                    return html.Div(
+                        "⚠️ No buildings match the current filters", 
+                        className="warning-message"
+                    )
             
-            return ""
-        
+            return ""  # Empty message
+
         @self.app.callback(
             Output("data-summary", "children"),
             [Input("geojson-saved", "data"), Input("filtered-buildings", "data")]

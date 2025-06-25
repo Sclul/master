@@ -98,6 +98,57 @@ button {
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
+/* ===== FILTER FORM STYLES ===== */
+.filter-row {
+    margin-bottom: 1rem;
+}
+
+.filter-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+    color: #2d3748;
+    font-size: 0.9rem;
+}
+
+.filter-checkbox {
+    margin-bottom: 0.5rem;
+}
+
+.filter-checkbox label {
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+    color: #4a5568;
+    cursor: pointer;
+}
+
+.filter-checkbox input[type="checkbox"] {
+    margin-right: 0.5rem;
+    width: 16px;
+    height: 16px;
+}
+
+.number-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: border-color 0.3s ease;
+    background: white;
+}
+
+.number-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.number-input::placeholder {
+    color: #a0aec0;
+}
+
 /* ===== MAP PANEL STYLES ===== */
 .map-panel {
     width: 75%;
@@ -194,6 +245,36 @@ button {
     padding: 0.5rem;
     margin: 0.5rem 0;
     font-size: 0.9rem;
+    opacity: 1;
+    transform: translateY(0);
+    transition: all 0.3s ease-out;
+    animation: slideInFade 0.3s ease-out;
+}
+
+.success-message.auto-hide {
+    animation: slideInFade 0.3s ease-out;
+}
+
+@keyframes slideInFade {
+    0% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeOut {
+    0% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
 }
 
 .error-message {
@@ -204,6 +285,7 @@ button {
     padding: 0.5rem;
     margin: 0.5rem 0;
     font-size: 0.9rem;
+    animation: slideInFade 0.3s ease-out;
 }
 
 .warning-message {
@@ -214,6 +296,7 @@ button {
     padding: 0.5rem;
     margin: 0.5rem 0;
     font-size: 0.9rem;
+    animation: slideInFade 0.3s ease-out;
 }
 
 /* ===== LAYER TOGGLE STYLES ===== */

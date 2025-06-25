@@ -67,9 +67,14 @@ class GeospatialCallbacks(BaseCallback):
         @self.app.callback(
             Output("filtered-buildings", "data"),
             Input("apply-filters-btn", "n_clicks"),
+            [
+                State("exclude-zero-heat-demand", "value"),
+                State("min-heat-demand", "value"),
+                State("max-heat-demand", "value")
+            ],
             prevent_initial_call=True
         )
-        def apply_building_filters(n_clicks):
+        def apply_building_filters(n_clicks, exclude_zero_value, min_heat_demand, max_heat_demand):
             """Apply building filters and save filtered results."""
             if not n_clicks:
                 return no_update
@@ -77,8 +82,27 @@ class GeospatialCallbacks(BaseCallback):
             try:
                 logger.info("Applying building filters")
                 
-                # Load and filter buildings using default config filters
-                filtered_buildings, streets = self.building_filter.load_and_filter_buildings()
+                # Build filter criteria from UI inputs
+                filter_criteria = {}
+                
+                # Get base filters from config
+                base_filters = self.config.building_filters
+                if base_filters:
+                    filter_criteria.update(base_filters)
+                
+                # Override with UI values
+                filter_criteria["exclude_zero_heat_demand"] = bool(exclude_zero_value and "exclude" in exclude_zero_value)
+                
+                if min_heat_demand is not None:
+                    filter_criteria["min_heat_demand"] = min_heat_demand
+                
+                if max_heat_demand is not None:
+                    filter_criteria["max_heat_demand"] = max_heat_demand
+                
+                logger.info(f"Filter criteria: {filter_criteria}")
+                
+                # Load and filter buildings with custom criteria
+                filtered_buildings, streets = self.building_filter.load_and_filter_buildings(filter_criteria)
                 
                 if filtered_buildings is None:
                     return {"status": "error", "message": "Could not load buildings data"}
@@ -91,7 +115,8 @@ class GeospatialCallbacks(BaseCallback):
                 
                 return {
                     **save_result,
-                    "filter_applied": True
+                    "filter_applied": True,
+                    "filter_criteria": filter_criteria
                 }
 
             except Exception as e:
