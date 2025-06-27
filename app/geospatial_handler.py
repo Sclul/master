@@ -9,6 +9,7 @@ import geopandas as gpd # type: ignore
 import fiona # type: ignore
 from shapely.geometry import shape, Point # type: ignore
 from shapely.geometry import mapping # type: ignore
+from building_clusterer import BuildingClusterer # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,9 @@ class GeospatialHandler:
         
         # Data directory path
         self.data_dir = Path(config.data_paths.get("data_dir", "data"))
+        
+        # Initialize building clusterer
+        self.building_clusterer = BuildingClusterer(config)
         
         
     def clear_data_directory(self) -> Dict[str, Any]:
@@ -253,6 +257,14 @@ class GeospatialHandler:
             logger.info("Querying heat demand data for buildings...")
             gdf_filtered = self._add_heat_demand_to_buildings(gdf_filtered)
 
+            # Apply building clustering if enabled in configuration
+            clustering_config = self.config.config.get("building_clustering", {})
+            if clustering_config.get("auto_apply", False):
+                logger.info("Applying building clustering (auto-enabled)...")
+                gdf_filtered = self.building_clusterer.cluster_buildings(gdf_filtered)
+            else:
+                logger.info("Building clustering disabled in configuration")
+
             # Save to GeoJSON (will be in EPSG:5243)
             gdf_filtered.to_file(buildings_path, driver="GeoJSON")
             logger.info(f"Buildings with heat demand data saved to {buildings_path} (CRS: {gdf_filtered.crs})")
@@ -260,10 +272,17 @@ class GeospatialHandler:
             # Generate summary statistics
             heat_demand_stats = self._get_heat_demand_summary(gdf_filtered)
             
-            return {
+            # Add clustering statistics if clustering was applied
+            result_data = {
                 "status": "saved", 
                 "heat_demand_stats": heat_demand_stats
             }
+            
+            if clustering_config.get("auto_apply", False):
+                clustering_stats = self.building_clusterer.get_clustering_statistics(gdf_filtered)
+                result_data["clustering_stats"] = clustering_stats
+            
+            return result_data
             
         except Exception as e:
             logger.error(f"Error processing buildings: {e}")

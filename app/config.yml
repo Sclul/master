@@ -56,3 +56,7 @@ building_filters:
   postcodes: [""]  # Include only these postcodes (empty = all postcodes)
   cities: [""]     # Include only these cities (empty = all cities) 
   building_uses: [""] # Include only these building uses (empty = all uses)
+
+# Building clustering configuration
+building_clustering:
+  auto_apply: true   # Automatically apply clustering when processing buildings

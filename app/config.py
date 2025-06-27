@@ -53,9 +53,12 @@ class Config:
         },
         "building_filters": {
             "exclude_zero_heat_demand": True,
-            "postcodes": ["50670"],
-            "cities": ["Köln"],
-            "building_uses": ["residential"]
+            "postcodes": [""],
+            "cities": [""],
+            "building_uses": [""]
+        },
+        "building_clustering": {
+            "auto_apply": True
         }
     }
     
@@ -159,7 +162,7 @@ class Config:
         """Get building filters from config."""
         return self.config.get("building_filters", {
             "exclude_zero_heat_demand": True,
-            "postcodes": ["50670"],
-            "cities": ["Köln"],
-            "building_uses": ["residential"]
+            "postcodes": [""],
+            "cities": [""],
+            "building_uses": [""]
         })

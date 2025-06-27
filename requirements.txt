@@ -7,3 +7,5 @@ fiona
 geopandas
 pyyaml
 plotly
+scikit-learn
+numpy
