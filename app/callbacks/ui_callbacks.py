@@ -1,6 +1,6 @@
 """Callbacks for UI updates and status displays."""
 import logging
-from dash_extensions.enrich import Input, Output, no_update # type: ignore
+from dash_extensions.enrich import Input, Output, no_update, clientside_callback # type: ignore
 from dash import html, dcc
 
 from .base_callback import BaseCallback
@@ -47,6 +47,28 @@ class UICallbacks(BaseCallback):
                     )
             
             return ""  # Empty message
+
+        @self.app.callback(
+            Output("measurement-status", "children"),
+            Input("start-measurement-btn", "n_clicks"),
+            prevent_initial_call=True
+        )
+        def handle_measurement_button(n_clicks):
+            """Handle measurement button click and provide status."""
+            if n_clicks:
+                return html.Div(
+                    "📏 Measurement tool toggled - click to start measuring or finish current measurement", 
+                    className="success-message"
+                )
+            return ""
+
+        # Add clientside callback to trigger the JavaScript function
+        clientside_callback(
+            "handleMeasurementButton",
+            Output("start-measurement-btn", "data-n-clicks"),
+            Input("start-measurement-btn", "n_clicks"),
+            prevent_initial_call=True
+        )
 
         @self.app.callback(
             Output("data-summary", "children"),

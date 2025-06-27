@@ -11,7 +11,7 @@ def get_event_handlers():
         measurefinish=assign(
             """
             function(e, ctx) {
-                ctx.setProps({coords: getAreaCoords(e)});
+                ctx.setProps({coords: autoDeleteMeasurement(e)});
             }
             """
         ),

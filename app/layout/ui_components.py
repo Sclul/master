@@ -66,6 +66,18 @@ def create_control_panel(config=None):
             
         ], className="filter-section"),
         
+        # Measurement tools section
+        html.Section([
+            html.H4("Measurement Tools"),
+            html.Button(
+                "Toggle Area Measurement", 
+                id="start-measurement-btn", 
+                className="btn-primary",
+                style={"marginBottom": "0.5rem"}
+            ),
+            html.Div(id="measurement-status")
+        ], className="filter-section"),
+        
         # Building attribute filters
         html.Section([
             html.H4("Building Attribute Filters"),
