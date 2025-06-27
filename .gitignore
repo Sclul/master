@@ -1,8 +1,21 @@
-app/cache
-app/assets/dashExtensions_default.js
-app/data
-app/__pycache__
-app/callbacks/__pycache__
-app/layout/__pycache__
+# Python cache files
+app/cache/
+app/__pycache__/
+app/callbacks/__pycache__/
+app/layout/__pycache__/
 
+# Data files
+app/data/
+
+# Dash extensions auto-generated files
+app/assets/dashExtensions_default.js
+
+# Template compiled files (if any)
 app/templates/*.compiled
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local

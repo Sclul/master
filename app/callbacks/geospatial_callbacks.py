@@ -4,8 +4,8 @@ from dash_extensions.enrich import Input, Output, State, no_update # type: ignor
 from dash import html
 
 from .base_callback import BaseCallback
-from geospatial_handler import GeospatialHandler  # Remove the ..
-from building_filter import BuildingFilter  # Remove the ..
+from geospatial_handler import GeospatialHandler
+from building_filter import BuildingFilter
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,21 @@
+# Git files
+.git
+.gitignore
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Python cache
+**/__pycache__
+app/cache/
+
+# Generated JS
+app/assets/dashExtensions_default.js
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env*
