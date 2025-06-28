@@ -19,7 +19,7 @@ def get_event_handlers():
 
 
 def create_map_component(config=None):
-    """Create the main map component with essential features only."""
+    """Create a clean, minimal map component for desktop use."""
     # Default configuration
     defaults = {
         "center": [50.9413, 6.9572],
@@ -52,22 +52,21 @@ def create_map_component(config=None):
     event_handlers = get_event_handlers()
     
     return html.Div([
-        # Layer controls
+        # Layer controls bar above map
         html.Div([
-            html.H4("Map Layers"),
             dcc.Checklist(
                 id="layer-toggles",
                 options=[
                     {"label": "Streets", "value": "streets"},
                     {"label": "Buildings", "value": "buildings"},
-                    {"label": "Filtered Buildings", "value": "filtered"},
+                    {"label": "Filtered", "value": "filtered"},
                 ],
                 value=[],
-                className="layer-toggles"
+                className="map-layer-controls"
             )
-        ], className="layer-controls"),
+        ], className="map-controls-bar"),
         
-        # Map
+        # Clean map component
         dl.Map([
             dl.TileLayer(url=tile_url, attribution=attribution),
             dl.MeasureControl(
@@ -83,11 +82,5 @@ def create_map_component(config=None):
         center=center,
         zoom=zoom,
         className="map",
-        id="map"),
-        
-        # Map info
-        html.Div([
-            html.Div(id="map-coordinates"),
-            html.Div(id="map-zoom-info")
-        ], className="map-info")
+        id="map")
     ], className="map-container")

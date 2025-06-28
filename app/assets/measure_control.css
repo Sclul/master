@@ -1,9 +1,0 @@
-/* Hide the entire leaflet measure control */
-.leaflet-control-measure {
-    display: none !important;
-}
-
-/* Hide the measure control interaction panel */
-.leaflet-control-measure-interaction {
-    display: none !important;
-}

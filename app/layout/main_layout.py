@@ -1,4 +1,4 @@
-"""Main application layout - simplified to essential features only."""
+"""Clean, minimal desktop application layout."""
 from dash import dcc
 from dash_extensions.enrich import html # type: ignore
 
@@ -7,30 +7,35 @@ from .ui_components import create_control_panel, create_status_panel
 
 
 def create_layout(config=None):
-    """Create the main application layout with essential features only."""
+    """Create a clean, minimal desktop-focused application layout."""
     return html.Div([
-        # Header
+        # Clean Header
         html.Header([
-            html.H1("OSM Heat Demand Analysis", className="app-title")
+            html.H1("Heat Demand Analysis Platform", className="app-title"),
         ], className="app-header"),
         
-        # Main content
+        # Main desktop workspace - three columns
         html.Main([
-            # Control panel - simplified
+            # Left sidebar with controls
             html.Aside([
                 create_control_panel(config)
-            ], className="control-panel"),
+            ], className="sidebar"),
             
-            # Map and status panel
+            # Central map area
             html.Section([
-                create_map_component(config),
+                create_map_component(config)
+            ], className="map-section"),
+            
+            # Right panel for status and results
+            html.Aside([
                 create_status_panel()
-            ], className="map-panel")
-        ], className="main-content"),
+            ], className="results-panel")
+        ], className="main-workspace"),
         
-        # Hidden data stores - only what's used
+        # Hidden data stores
         html.Div([
             dcc.Store(id="geojson-saved"),
             dcc.Store(id="filtered-buildings"),
-        ], id="data-stores", style={"display": "none"})
+            dcc.Store(id="filter-options-store")
+        ], style={"display": "none"})
     ], className="app-container")

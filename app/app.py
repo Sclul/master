@@ -25,7 +25,8 @@ def create_app():
         app = DashProxy(
             __name__,
             transforms=[MultiplexerTransform()],
-            suppress_callback_exceptions=True
+            suppress_callback_exceptions=True,
+            external_stylesheets=['/assets/styles.css']
         )
         
         # Set layout

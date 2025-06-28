@@ -1,9 +1,9 @@
-"""UI control and status components - simplified to essential features."""
+"""Clean, minimal UI components."""
 from dash import dcc, html
 
 
 def create_control_panel(config=None):
-    """Create the control panel with only essential controls."""
+    """Create a clean control panel with essential controls."""
     # Get default values from config
     default_exclude_zero = True
     default_min_heat = None
@@ -18,135 +18,107 @@ def create_control_panel(config=None):
     return html.Div([
         html.H3("Controls"),
         
-        # Apply filters button at the top
+        # Measurement tools
+        html.Section([
+            html.H4("Area Selection"),
+            html.Button("Draw Analysis Area", id="start-measurement-btn", className="btn-primary"),
+            html.Div(id="measurement-status")
+        ], className="control-group"),
+        
+        # Apply filters button
         html.Button("Apply Filters", id="apply-filters-btn", className="btn-primary"),
         html.Div(id="filter-status"),
         
-        # Building filters - heat demand controls
+        # Heat demand filters
         html.Section([
-            html.H4("Heat Demand Filters"),
+            html.H4("Heat Demand"),
             
-            # Exclude zero heat demand checkbox
             html.Div([
                 dcc.Checklist(
                     id="exclude-zero-heat-demand",
-                    options=[{"label": "Exclude buildings with zero heat demand", "value": "exclude"}],
-                    value=["exclude"] if default_exclude_zero else [],
-                    className="filter-checkbox"
+                    options=[{"label": "Exclude zero heat demand", "value": "exclude"}],
+                    value=["exclude"] if default_exclude_zero else []
                 )
-            ], className="filter-row"),
+            ]),
             
-            # Min heat demand input
             html.Div([
-                html.Label("Minimum Heat Demand:", className="filter-label"),
+                html.Label("Min:"),
                 dcc.Input(
                     id="min-heat-demand",
                     type="number",
-                    placeholder="Enter minimum heat demand",
+                    placeholder="Min",
                     value=default_min_heat,
-                    step=1,
-                    min=0,
-                    className="number-input"
+                    className="input-small"
                 )
-            ], className="filter-row"),
+            ], className="input-group"),
             
-            # Max heat demand input  
             html.Div([
-                html.Label("Maximum Heat Demand:", className="filter-label"),
+                html.Label("Max:"),
                 dcc.Input(
                     id="max-heat-demand",
                     type="number",
-                    placeholder="Enter maximum heat demand",
+                    placeholder="Max",
                     value=default_max_heat,
-                    step=1,
-                    min=0,
-                    className="number-input"
+                    className="input-small"
                 )
-            ], className="filter-row"),
-            
-        ], className="filter-section"),
+            ], className="input-group"),
+        ], className="control-group"),
         
-        # Measurement tools section
+        # Building filters
         html.Section([
-            html.H4("Measurement Tools"),
-            html.Button(
-                "Toggle Area Measurement", 
-                id="start-measurement-btn", 
-                className="btn-primary",
-                style={"marginBottom": "0.5rem"}
-            ),
-            html.Div(id="measurement-status")
-        ], className="filter-section"),
-        
-        # Building attribute filters
-        html.Section([
-            html.H4("Building Attribute Filters"),
+            html.H4("Building Filters"),
             
-            # Street filter
             html.Div([
-                html.Label("Street:", className="filter-label"),
+                html.Label("Street:"),
                 dcc.Dropdown(
                     id="street-filter",
-                    placeholder="Select streets...",
-                    multi=True,
-                    className="dropdown-filter"
+                    placeholder="Select...",
+                    multi=True
                 )
-            ], className="filter-row"),
+            ], className="filter-item"),
             
-            # Postcode filter
             html.Div([
-                html.Label("Postcode:", className="filter-label"),
+                html.Label("Postcode:"),
                 dcc.Dropdown(
                     id="postcode-filter",
-                    placeholder="Select postcodes...",
-                    multi=True,
-                    className="dropdown-filter"
+                    placeholder="Select...",
+                    multi=True
                 )
-            ], className="filter-row"),
+            ], className="filter-item"),
             
-            # City filter
             html.Div([
-                html.Label("City:", className="filter-label"),
+                html.Label("City:"),
                 dcc.Dropdown(
                     id="city-filter",
-                    placeholder="Select cities...",
-                    multi=True,
-                    className="dropdown-filter"
+                    placeholder="Select...",
+                    multi=True
                 )
-            ], className="filter-row"),
+            ], className="filter-item"),
             
-            # Building use filter
             html.Div([
-                html.Label("Building Use:", className="filter-label"),
+                html.Label("Building Use:"),
                 dcc.Dropdown(
                     id="building-use-filter",
-                    placeholder="Select building uses...",
-                    multi=True,
-                    className="dropdown-filter"
+                    placeholder="Select...",
+                    multi=True
                 )
-            ], className="filter-row"),
-            
-        ], className="filter-section"),
-        
-        # Hidden store for filter options
-        dcc.Store(id="filter-options-store")
-        
-    ], className="control-panel-content")
+            ], className="filter-item"),
+        ], className="control-group")
+    ], className="control-panel")
 
 
 def create_status_panel():
-    """Create the status panel with only essential information."""
+    """Create a clean status panel."""
     return html.Div([
-        # Processing status - essential
-        html.Section([
-            html.H4("Processing Status"),
-            html.Div(id="log", className="log-display")
-        ], className="status-section"),
+        html.H3("Status"),
         
-        # Data summary - essential
+        html.Section([
+            html.H4("Processing"),
+            html.Div(id="log", className="log-area")
+        ]),
+        
         html.Section([
             html.H4("Data Summary"),
-            html.Div(id="data-summary", className="summary-display")
-        ], className="summary-section"),
-        
-    ], className="status-panel-content")
+            html.Div(id="data-summary", className="summary-area")
+        ]),
+    ], className="status-panel")
