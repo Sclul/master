@@ -113,11 +113,6 @@ def create_status_panel():
         html.H3("Status"),
         
         html.Section([
-            html.H4("Processing"),
-            html.Div(id="log", className="log-area")
-        ]),
-        
-        html.Section([
             html.H4("Data Summary"),
             html.Div(id="data-summary", className="summary-area")
         ]),

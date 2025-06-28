@@ -1,7 +1,7 @@
 """Callbacks for UI updates and status displays."""
 import logging
 from dash_extensions.enrich import Input, Output, no_update, clientside_callback # type: ignore
-from dash import html, dcc
+from dash import html, dcc # type: ignore
 
 from .base_callback import BaseCallback
 
@@ -13,17 +13,6 @@ class UICallbacks(BaseCallback):
     
     def _register_callbacks(self):
         """Register UI-related callbacks."""
-        
-        @self.app.callback(
-            Output("log", "children"), 
-            Input("geojson-saved", "data")
-        )
-        def update_processing_log(status_data):
-            """Update main processing log display."""
-            if status_data is not None and isinstance(status_data, dict):
-                return self._format_processing_messages(status_data)
-            
-            return "Ready to process polygon data"
         
         @self.app.callback(
             Output("filter-status", "children"),
@@ -86,35 +75,3 @@ class UICallbacks(BaseCallback):
                     ])
             
             return summary_elements if summary_elements else "No data available"
-    
-    def _format_processing_messages(self, status_data):
-        """Format processing status messages."""
-        streets_status = status_data.get("streets", {})
-        buildings_status = status_data.get("buildings", {})
-        
-        messages = []
-        
-        # Streets status
-        if streets_status.get("status") == "no_streets":
-            messages.append("❌ No streets found in the selected area.")
-        elif streets_status.get("status") == "error":
-            messages.append(f"❌ Streets error: {streets_status.get('message')}")
-        elif streets_status.get("status") == "saved":
-            messages.append("✅ Streets processed successfully")
-        
-        # Buildings status
-        if buildings_status.get("status") == "no_buildings":
-            messages.append("❌ No buildings found in the selected area.")
-        elif buildings_status.get("status") == "error":
-            messages.append(f"❌ Buildings error: {buildings_status.get('message')}")
-        elif buildings_status.get("status") == "saved":
-            messages.append("✅ Buildings processed successfully")
-            
-            # Heat demand statistics
-            heat_stats = buildings_status.get("heat_demand_stats", {})
-            if isinstance(heat_stats, dict) and "total_buildings" in heat_stats:
-                messages.append(f"📊 Heat demand data: {heat_stats['buildings_with_data']}/{heat_stats['total_buildings']} buildings ({heat_stats['coverage_percentage']}% coverage)")
-                if heat_stats.get("total_heat_demand"):
-                    messages.append(f"🔥 Total heat demand: {heat_stats['total_heat_demand']} kWh")
-        
-        return [html.Div(message) for message in messages] if messages else "Processing completed"
