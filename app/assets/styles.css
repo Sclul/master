@@ -297,6 +297,22 @@ body {
     background: #3182ce;
 }
 
+.btn-primary.drawing-active {
+    background: #f56565;
+    color: white;
+    font-weight: 600;
+    position: relative;
+}
+
+.btn-primary.drawing-active:hover {
+    background: #e53e3e;
+}
+
+.btn-primary.drawing-active::after {
+    content: " ✏️";
+    margin-left: 8px;
+}
+
 button {
     padding: var(--space-3) var(--space-4);
     border: none;

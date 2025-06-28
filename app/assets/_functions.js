@@ -71,6 +71,7 @@ function startMeasurement() {
                     cancelable: true
                 });
                 finishButton.dispatchEvent(finishEvent);
+                setDrawingButtonState(false); // Set button to inactive state
                 return;
             }
         }
@@ -107,6 +108,14 @@ function startMeasurement() {
                             cancelable: true
                         });
                         startButton.dispatchEvent(startClickEvent);
+                        
+                        // Set button to active state after starting measurement
+                        setTimeout(() => {
+                            const isMeasuring = document.querySelector('.js-measuringprompt');
+                            if (isMeasuring && isMeasuring.style.display !== 'none') {
+                                setDrawingButtonState(true);
+                            }
+                        }, 100);
                     } else {
                         console.log("Start button not found");
                     }
@@ -127,6 +136,14 @@ function startMeasurement() {
                                         cancelable: true
                                     });
                                     startBtn.dispatchEvent(startEvent);
+                                    
+                                    // Set button to active state
+                                    setTimeout(() => {
+                                        const isMeasuring = document.querySelector('.js-measuringprompt');
+                                        if (isMeasuring && isMeasuring.style.display !== 'none') {
+                                            setDrawingButtonState(true);
+                                        }
+                                    }, 100);
                                 }
                             }, 50);
                         }
@@ -139,6 +156,81 @@ function startMeasurement() {
         }
     } catch (error) {
         console.error("Error in startMeasurement:", error);
+    }
+}
+
+function setDrawingButtonState(isActive) {
+    // Set the visual state of the drawing button
+    const drawButton = document.getElementById('start-measurement-btn');
+    if (drawButton) {
+        if (isActive) {
+            drawButton.classList.add('drawing-active');
+            drawButton.textContent = 'Drawing Area...';
+            console.log("Button set to active drawing state");
+            // Start monitoring for measurement state changes
+            startMeasurementMonitor();
+        } else {
+            drawButton.classList.remove('drawing-active');
+            drawButton.textContent = 'Draw Analysis Area';
+            console.log("Button set to inactive state");
+            // Stop monitoring
+            stopMeasurementMonitor();
+        }
+    }
+}
+
+let measurementMonitorInterval = null;
+let measurementKeyListener = null;
+
+function startMeasurementMonitor() {
+    // Clear any existing monitor
+    if (measurementMonitorInterval) {
+        clearInterval(measurementMonitorInterval);
+    }
+    
+    // Add escape key listener
+    if (measurementKeyListener) {
+        document.removeEventListener('keydown', measurementKeyListener);
+    }
+    
+    measurementKeyListener = function(event) {
+        if (event.key === 'Escape') {
+            console.log("Escape key pressed during measurement, resetting button state");
+            setTimeout(() => {
+                setDrawingButtonState(false);
+            }, 100);
+        }
+    };
+    
+    document.addEventListener('keydown', measurementKeyListener);
+    
+    // Monitor every 300ms to check if measurement is still active
+    measurementMonitorInterval = setInterval(() => {
+        const measuringPrompt = document.querySelector('.js-measuringprompt');
+        const measureInteraction = document.querySelector('.leaflet-control-measure-interaction.js-interaction');
+        
+        // Check various conditions that indicate measurement is no longer active
+        const isInteractionHidden = !measureInteraction || measureInteraction.style.display === 'none';
+        const isMeasuringHidden = !measuringPrompt || measuringPrompt.style.display === 'none';
+        const hasNoMeasureControl = !document.querySelector('.leaflet-control-measure');
+        
+        // If any of these conditions are true, measurement is no longer active
+        if (isInteractionHidden || isMeasuringHidden || hasNoMeasureControl) {
+            console.log("Measurement no longer active (monitor detected), resetting button state");
+            setDrawingButtonState(false);
+        }
+    }, 300);
+}
+
+function stopMeasurementMonitor() {
+    if (measurementMonitorInterval) {
+        clearInterval(measurementMonitorInterval);
+        measurementMonitorInterval = null;
+    }
+    
+    if (measurementKeyListener) {
+        document.removeEventListener('keydown', measurementKeyListener);
+        measurementKeyListener = null;
     }
 }
 
@@ -159,6 +251,8 @@ function autoDeleteMeasurement(e) {
                             setTimeout(() => {
                                 deleteButton.click();
                                 observer.disconnect();
+                                // Reset button state when measurement is completed
+                                setDrawingButtonState(false);
                             }, 100); // Small delay to ensure popup is fully rendered
                         }
                         
@@ -169,6 +263,8 @@ function autoDeleteMeasurement(e) {
                             setTimeout(() => {
                                 deleteBtn.click();
                                 observer.disconnect();
+                                // Reset button state when measurement is completed
+                                setDrawingButtonState(false);
                             }, 100);
                         }
                     }
@@ -190,6 +286,8 @@ function autoDeleteMeasurement(e) {
             console.log("Auto-clicking existing delete button");
             existingDeleteButton.click();
             observer.disconnect();
+            // Reset button state when measurement is completed
+            setDrawingButtonState(false);
         }
     }, 50);
     
@@ -204,7 +302,10 @@ window.dashExtensions = Object.assign({}, window.dashExtensions, {
         getAreaCoords: getAreaCoords,
         autoDeleteMeasurement: autoDeleteMeasurement,
         startMeasurement: startMeasurement,
-        handleMeasurementButton: handleMeasurementButton
+        handleMeasurementButton: handleMeasurementButton,
+        setDrawingButtonState: setDrawingButtonState,
+        startMeasurementMonitor: startMeasurementMonitor,
+        stopMeasurementMonitor: stopMeasurementMonitor
     }
 });
 
@@ -213,3 +314,6 @@ window.getAreaCoords = getAreaCoords;
 window.autoDeleteMeasurement = autoDeleteMeasurement;
 window.startMeasurement = startMeasurement;
 window.handleMeasurementButton = handleMeasurementButton;
+window.setDrawingButtonState = setDrawingButtonState;
+window.startMeasurementMonitor = startMeasurementMonitor;
+window.stopMeasurementMonitor = stopMeasurementMonitor;

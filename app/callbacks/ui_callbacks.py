@@ -55,11 +55,6 @@ class UICallbacks(BaseCallback):
         )
         def handle_measurement_button(n_clicks):
             """Handle measurement button click and provide status."""
-            if n_clicks:
-                return html.Div(
-                    "📏 Measurement tool toggled - click to start measuring or finish current measurement", 
-                    className="success-message"
-                )
             return ""
 
         # Add clientside callback to trigger the JavaScript function
