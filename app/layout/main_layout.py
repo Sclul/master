@@ -36,6 +36,7 @@ def create_layout(config=None):
         html.Div([
             dcc.Store(id="geojson-saved"),
             dcc.Store(id="filtered-buildings"),
-            dcc.Store(id="filter-options-store")
+            dcc.Store(id="filter-options-store"),
+            dcc.Store(id="network-data")
         ], style={"display": "none"})
     ], className="app-container")

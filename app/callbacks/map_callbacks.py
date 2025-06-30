@@ -18,9 +18,9 @@ class MapCallbacks(BaseCallback):
         
         @self.app.callback(
             Output("data-layers", "children"),
-            Input("layer-toggles", "value"),
+            [Input("layer-toggles", "value"), Input("network-data", "data")],
         )
-        def update_map_layers(selected_layers):
+        def update_map_layers(selected_layers, network_data):
             """Update map layers based on toggle states."""
             if selected_layers is None:
                 selected_layers = []
@@ -28,10 +28,11 @@ class MapCallbacks(BaseCallback):
             show_streets = "streets" in selected_layers
             show_buildings = "buildings" in selected_layers
             show_filtered = "filtered" in selected_layers
+            show_network = "network" in selected_layers
             
-            logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}")
+            logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}, network={show_network}")
             
-            layers = self._build_data_layers(show_streets, show_buildings, show_filtered)
+            layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network)
             return layers
 
         @self.app.callback(
@@ -63,7 +64,7 @@ class MapCallbacks(BaseCallback):
             """Display current zoom level."""
             return f"Zoom: {zoom}" if zoom else "Zoom: Unknown"
     
-    def _build_data_layers(self, show_streets, show_buildings, show_filtered):
+    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False):
         """Build only the data layers (not base map components)."""
         layers = []
         
@@ -84,6 +85,12 @@ class MapCallbacks(BaseCallback):
             if filtered_layer is not None:
                 layers.append(filtered_layer)
                 logger.info("Added filtered buildings layer to map")
+        
+        if show_network:
+            network_layer = self._create_network_layer()
+            if network_layer is not None:
+                layers.append(network_layer)
+                logger.info("Added heating network layer to map")
         
         logger.info(f"Total data layers built: {len(layers)}")
         return layers
@@ -137,4 +144,12 @@ class MapCallbacks(BaseCallback):
             self.data_paths["filtered_buildings_path"],
             "filtered-buildings-layer",
             {"color": "green", "weight": 2, "fillOpacity": 0.5}
+        )
+    
+    def _create_network_layer(self):
+        """Create heating network layer from saved data."""
+        return self._create_layer_from_file(
+            self.data_paths.get("network_path", "./data/heating_network.geojson"),
+            "heating-network-layer",
+            {"color": "orange", "weight": 2, "opacity": 0.8}
         )

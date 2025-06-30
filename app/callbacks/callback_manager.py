@@ -3,6 +3,7 @@ import logging
 from .geospatial_callbacks import GeospatialCallbacks
 from .ui_callbacks import UICallbacks
 from .map_callbacks import MapCallbacks
+from .network_callbacks import NetworkCallbacks
 
 logger = logging.getLogger(__name__)
 
@@ -19,5 +20,6 @@ class CallbackManager:
         self.geospatial = GeospatialCallbacks(app, config)
         self.ui = UICallbacks(app, config)
         self.map = MapCallbacks(app, config)
+        self.network = NetworkCallbacks(app, config)
         
         logger.info("Essential callback modules initialized")

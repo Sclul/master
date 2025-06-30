@@ -23,6 +23,7 @@ data_paths:
   streets_path: "./data/streets.geojson"
   buildings_path: "./data/buildings.geojson"
   filtered_buildings_path: "./data/filtered_buildings.geojson"
+  network_path: "./data/heating_network.geojson"
 
 # Heat demand configuration
 heat_demand:
