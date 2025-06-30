@@ -114,9 +114,19 @@ class GeospatialHandler:
             # Transform to EPSG:5243
             gdf_edges = gdf_edges.to_crs(self.target_crs)
             
-            # Save to GeoJSON
-            gdf_edges.to_file(streets_path, driver="GeoJSON")
-            logger.info(f"Streets saved to {streets_path} (CRS: {gdf_edges.crs})")
+            # Filter to keep only essential columns: geometry, highway, name, length
+            essential_columns = ['geometry']
+            desired_columns = ['highway', 'name', 'length']
+            
+            # Add desired columns if they exist in the GeoDataFrame
+            available_columns = essential_columns + [col for col in desired_columns if col in gdf_edges.columns]
+            
+            # Create filtered GeoDataFrame with only essential data
+            gdf_filtered = gdf_edges[available_columns].copy()
+            
+            # Save filtered GeoJSON
+            gdf_filtered.to_file(streets_path, driver="GeoJSON")
+            logger.info(f"Streets saved to {streets_path} with columns: {available_columns} (CRS: {gdf_filtered.crs})")
             
             return {"status": "saved"}
             
