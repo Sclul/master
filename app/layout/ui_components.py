@@ -1,5 +1,5 @@
 """Clean, minimal UI components."""
-from dash import dcc, html
+from dash import dcc, html # type: ignore
 
 
 def create_control_panel(config=None):
@@ -25,14 +25,21 @@ def create_control_panel(config=None):
             html.Div(id="measurement-status")
         ], className="control-group"),
         
+        # Network generation
+        html.Section([
+            html.H4("District Heating Network"),
+            html.Button("Generate Network", id="generate-network-btn", className="btn-primary"),
+            html.Div(id="network-status")
+        ], className="control-group"),
+        
         # Apply filters button
-        html.Button("Apply Filters", id="apply-filters-btn", className="btn-primary"),
-        html.Div(id="filter-status"),
         
         # Heat demand filters
         html.Section([
             html.H4("Heat Demand"),
             
+            html.Button("Apply Filters", id="apply-filters-btn", className="btn-primary"),
+            html.Div(id="filter-status"),
             html.Div([
                 dcc.Checklist(
                     id="exclude-zero-heat-demand",

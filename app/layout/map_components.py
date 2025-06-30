@@ -1,6 +1,6 @@
 """Map-related UI components."""
 import dash_leaflet as dl # type: ignore
-from dash import dcc
+from dash import dcc # type: ignore
 from dash_extensions.enrich import html # type: ignore
 from dash_extensions.javascript import assign # type: ignore
 

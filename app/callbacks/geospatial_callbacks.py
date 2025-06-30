@@ -1,7 +1,7 @@
 """Callbacks for geospatial data processing and building filtering."""
 import logging
 from dash_extensions.enrich import Input, Output, State, no_update # type: ignore
-from dash import html
+from dash import html # type: ignore
 
 from .base_callback import BaseCallback
 from geospatial_handler import GeospatialHandler

@@ -1,5 +1,5 @@
 """Clean, minimal desktop application layout."""
-from dash import dcc
+from dash import dcc # type: ignore
 from dash_extensions.enrich import html # type: ignore
 
 from .map_components import create_map_component
