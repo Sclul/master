@@ -56,15 +56,14 @@ class UICallbacks(BaseCallback):
 
         @self.app.callback(
             Output("data-summary", "children"),
-            [Input("geojson-saved", "data"), Input("filtered-buildings", "data")]
+            [Input("buildings-processed", "data"), Input("filtered-buildings", "data")]
         )
-        def update_data_summary(processing_data, filter_data):
+        def update_data_summary(buildings_data, filter_data):
             """Update data summary display."""
             summary_elements = []
             
-            if processing_data and isinstance(processing_data, dict):
-                buildings_status = processing_data.get("buildings", {})
-                heat_stats = buildings_status.get("heat_demand_stats", {})
+            if buildings_data and isinstance(buildings_data, dict):
+                heat_stats = buildings_data.get("heat_demand_stats", {})
                 
                 if isinstance(heat_stats, dict) and "total_buildings" in heat_stats:
                     summary_elements.extend([

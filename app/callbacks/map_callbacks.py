@@ -18,9 +18,9 @@ class MapCallbacks(BaseCallback):
         
         @self.app.callback(
             Output("data-layers", "children"),
-            [Input("layer-toggles", "value"), Input("network-data", "data")],
+            [Input("layer-toggles", "value"), Input("network-data", "data"), Input("filtered-buildings", "data")],
         )
-        def update_map_layers(selected_layers, network_data):
+        def update_map_layers(selected_layers, network_data, filtered_buildings_data):
             """Update map layers based on toggle states."""
             if selected_layers is None:
                 selected_layers = []
@@ -79,18 +79,17 @@ class MapCallbacks(BaseCallback):
 
         @self.app.callback(
             Output("layer-toggles", "value", allow_duplicate=True),
-            Input("geojson-saved", "data"),
+            Input("streets-processed", "data"),
             State("layer-toggles", "value"),
             prevent_initial_call=True
         )
-        def auto_enable_streets_layer(geojson_data, current_selected_layers):
+        def auto_enable_streets_layer(streets_data, current_selected_layers):
             """Auto-enable streets layer when streets are successfully processed and saved."""
-            if not geojson_data or not isinstance(geojson_data, dict):
+            if not streets_data or not isinstance(streets_data, dict):
                 return no_update
             
             # Only auto-enable if streets were just processed successfully
-            streets_status = geojson_data.get("streets", {})
-            if streets_status.get("status") == "saved":
+            if streets_data.get("status") == "saved":
                 updated_layers = (current_selected_layers or []).copy()
                 if "streets" not in updated_layers:
                     updated_layers.append("streets")

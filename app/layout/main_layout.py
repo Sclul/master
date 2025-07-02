@@ -34,7 +34,9 @@ def create_layout(config=None):
         
         # Hidden data stores
         html.Div([
-            dcc.Store(id="geojson-saved"),
+            dcc.Store(id="polygon-processed"),
+            dcc.Store(id="streets-processed"),
+            dcc.Store(id="buildings-processed"),
             dcc.Store(id="filtered-buildings"),
             dcc.Store(id="filter-options-store"),
             dcc.Store(id="network-data")

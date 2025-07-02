@@ -30,12 +30,15 @@ class GeospatialCallbacks(BaseCallback):
                 Output("building-use-filter", "options"),
                 Output("filter-options-store", "data")
             ],
-            Input("geojson-saved", "data"),
+            Input("buildings-processed", "data"),
             prevent_initial_call=True
         )
-        def update_filter_options(geojson_data):
+        def update_filter_options(buildings_data):
             """Update dropdown options based on loaded building data."""
-            if not geojson_data:
+            logger.info(f"update_filter_options called with: {buildings_data}")
+            
+            if not buildings_data or buildings_data.get("status") != "processed":
+                logger.warning(f"Buildings data not ready: {buildings_data}")
                 empty_options = []
                 return empty_options, empty_options, empty_options, empty_options, {}
             
@@ -44,6 +47,7 @@ class GeospatialCallbacks(BaseCallback):
                 buildings_gdf, _ = self.building_filter.load_geospatial_data()
                 
                 if buildings_gdf is None or buildings_gdf.empty:
+                    logger.warning("Buildings GDF is None or empty")
                     empty_options = []
                     return empty_options, empty_options, empty_options, empty_options, {}
                 
@@ -73,13 +77,16 @@ class GeospatialCallbacks(BaseCallback):
                 return empty_options, empty_options, empty_options, empty_options, {}
         
         @self.app.callback(
-            Output("geojson-saved", "data"),
+            Output("polygon-processed", "data"),
             Input("map", "coords"),
             prevent_initial_call=True
         )
         def process_polygon_data(coords):
-            """Process polygon data from map coordinates."""
+            """Process polygon data from map coordinates and prepare for streets/buildings processing."""
+            logger.info(f"process_polygon_data called with coords: {coords}")
+            
             if not coords:
+                logger.warning("No coordinates provided to process_polygon_data")
                 return no_update
             
             try:
@@ -94,25 +101,78 @@ class GeospatialCallbacks(BaseCallback):
                 polygon_path = self.data_paths["polygon_path"]
                 self.geospatial_handler.save_polygon(geojson, polygon_path)
                 
-                # Process streets
-                streets_path = self.data_paths["streets_path"]
-                streets_result = self.geospatial_handler.process_streets_from_polygon(geojson, streets_path)
-                
-                # Process buildings
-                buildings_path = self.data_paths["buildings_path"]
-                buildings_result = self.geospatial_handler.process_buildings_from_polygon(geojson, buildings_path)
-                
+                logger.info("Polygon processing completed successfully")
                 return {
-                    "streets": streets_result,
-                    "buildings": buildings_result
+                    "status": "processed",
+                    "geojson": geojson,
+                    "timestamp": logger.handlers[0].formatter.formatTime(logging.LogRecord("", 0, "", 0, "", (), None)) if logger.handlers else None
                 }
                 
             except Exception as e:
                 logger.error(f"Error processing polygon: {e}")
                 return {
-                    "streets": {"status": "error", "message": str(e)},
-                    "buildings": {"status": "error", "message": str(e)}
+                    "status": "error",
+                    "message": str(e)
                 }
+        
+        @self.app.callback(
+            Output("streets-processed", "data"),
+            Input("polygon-processed", "data"),
+            prevent_initial_call=True
+        )
+        def process_streets_data(polygon_data):
+            """Process streets data from polygon."""
+            logger.info(f"process_streets_data called with polygon_data: {polygon_data}")
+            
+            if not polygon_data or polygon_data.get("status") != "processed":
+                logger.warning("No polygon data or status not 'processed' in process_streets_data")
+                return no_update
+            
+            try:
+                logger.info("Processing streets from polygon")
+                
+                geojson = polygon_data["geojson"]
+                streets_path = self.data_paths["streets_path"]
+                streets_result = self.geospatial_handler.process_streets_from_polygon(geojson, streets_path)
+                
+                logger.info(f"Streets processing result: {streets_result}")
+                return streets_result
+                
+            except Exception as e:
+                logger.error(f"Error processing streets: {e}")
+                return {"status": "error", "message": str(e)}
+        
+        @self.app.callback(
+            Output("buildings-processed", "data"),
+            Input("polygon-processed", "data"),
+            prevent_initial_call=True
+        )
+        def process_buildings_data(polygon_data):
+            """Process buildings data from polygon."""
+            logger.info(f"process_buildings_data called with polygon_data: {polygon_data}")
+            
+            if not polygon_data or polygon_data.get("status") != "processed":
+                logger.warning("No polygon data or status not 'processed' in process_buildings_data")
+                return no_update
+            
+            try:
+                logger.info("Processing buildings from polygon")
+                
+                geojson = polygon_data["geojson"]
+                buildings_path = self.data_paths["buildings_path"]
+                buildings_result = self.geospatial_handler.process_buildings_from_polygon(geojson, buildings_path)
+                
+                logger.info(f"Buildings processing result: {buildings_result}")
+                
+                # Normalize the status to "processed" for consistency
+                if buildings_result.get("status") == "saved":
+                    buildings_result["status"] = "processed"
+                
+                return buildings_result
+                
+            except Exception as e:
+                logger.error(f"Error processing buildings: {e}")
+                return {"status": "error", "message": str(e)}
         
         @self.app.callback(
             Output("filtered-buildings", "data"),
