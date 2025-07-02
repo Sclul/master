@@ -73,24 +73,3 @@ class NetworkCallbacks(BaseCallback):
                     className="error-message"
                 )
                 return error_message, {"status": "error", "message": str(e)}
-
-        @self.app.callback(
-            Output("layer-toggles", "value", allow_duplicate=True),
-            Input("network-data", "data"),
-            State("layer-toggles", "value"),
-            prevent_initial_call=True
-        )
-        def auto_enable_network_layer(network_data, current_selected_layers):
-            """Auto-enable network layer when network is successfully generated."""
-            if not network_data or not isinstance(network_data, dict):
-                return no_update
-            
-            # Only auto-enable if network was just generated successfully
-            if network_data.get("status") == "success":
-                updated_layers = (current_selected_layers or []).copy()
-                if "network" not in updated_layers:
-                    updated_layers.append("network")
-                    logger.info("Auto-enabling network layer after successful network generation")
-                    return updated_layers
-            
-            return no_update

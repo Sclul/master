@@ -3,7 +3,7 @@ import logging
 import json
 import geopandas as gpd # type: ignore
 import dash_leaflet as dl # type: ignore
-from dash_extensions.enrich import Input, Output, State # type: ignore
+from dash_extensions.enrich import Input, Output, State, no_update # type: ignore
 
 from .base_callback import BaseCallback
 
@@ -44,7 +44,7 @@ class MapCallbacks(BaseCallback):
         def auto_enable_filtered_layer(filtered_buildings_data, current_selected_layers):
             """Auto-enable filtered buildings layer when filters are applied."""
             if not filtered_buildings_data or not isinstance(filtered_buildings_data, dict):
-                return current_selected_layers or []
+                return no_update
             
             # Only auto-enable if filters were just applied successfully
             if filtered_buildings_data.get("filter_applied") and filtered_buildings_data.get("status") == "saved":
@@ -54,7 +54,50 @@ class MapCallbacks(BaseCallback):
                     logger.info("Auto-enabling filtered buildings layer after successful filter application")
                     return updated_layers
             
-            return current_selected_layers or []
+            return no_update
+
+        @self.app.callback(
+            Output("layer-toggles", "value", allow_duplicate=True),
+            Input("network-data", "data"),
+            State("layer-toggles", "value"),
+            prevent_initial_call=True
+        )
+        def auto_enable_network_layer(network_data, current_selected_layers):
+            """Auto-enable network layer when network is successfully generated."""
+            if not network_data or not isinstance(network_data, dict):
+                return no_update
+            
+            # Only auto-enable if network was just generated successfully
+            if network_data.get("status") == "success":
+                updated_layers = (current_selected_layers or []).copy()
+                if "network" not in updated_layers:
+                    updated_layers.append("network")
+                    logger.info("Auto-enabling network layer after successful network generation")
+                    return updated_layers
+            
+            return no_update
+
+        @self.app.callback(
+            Output("layer-toggles", "value", allow_duplicate=True),
+            Input("geojson-saved", "data"),
+            State("layer-toggles", "value"),
+            prevent_initial_call=True
+        )
+        def auto_enable_streets_layer(geojson_data, current_selected_layers):
+            """Auto-enable streets layer when streets are successfully processed and saved."""
+            if not geojson_data or not isinstance(geojson_data, dict):
+                return no_update
+            
+            # Only auto-enable if streets were just processed successfully
+            streets_status = geojson_data.get("streets", {})
+            if streets_status.get("status") == "saved":
+                updated_layers = (current_selected_layers or []).copy()
+                if "streets" not in updated_layers:
+                    updated_layers.append("streets")
+                    logger.info("Auto-enabling streets layer after successful street processing")
+                    return updated_layers
+            
+            return no_update
 
         @self.app.callback(
             Output("map-zoom-info", "children"),
