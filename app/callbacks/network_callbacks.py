@@ -73,3 +73,13 @@ class NetworkCallbacks(BaseCallback):
                     className="error-message"
                 )
                 return error_message, {"status": "error", "message": str(e)}
+            
+        @self.app.callback(
+            Output("network-status", "children", allow_duplicate=True),
+            Input("start-measurement-btn", "n_clicks"),
+            prevent_initial_call=True
+        )
+        def clear_network_status_on_measurement(n_clicks):
+            """Clear network status when starting area selection."""
+            logger.info("Area Selection started - clearing network status")
+            return ""

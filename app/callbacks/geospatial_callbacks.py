@@ -271,3 +271,29 @@ class GeospatialCallbacks(BaseCallback):
             all_values = [option["value"] for option in building_use_options]
             logger.info(f"Auto-selected {len(all_values)} building uses by default")
             return all_values
+        
+        @self.app.callback(
+            [
+                Output("street-filter", "options", allow_duplicate=True),
+                Output("postcode-filter", "options", allow_duplicate=True),
+                Output("city-filter", "options", allow_duplicate=True),
+                Output("building-use-filter", "options", allow_duplicate=True),
+                Output("street-filter", "value", allow_duplicate=True),
+                Output("postcode-filter", "value", allow_duplicate=True),
+                Output("city-filter", "value", allow_duplicate=True),
+                Output("building-use-filter", "value", allow_duplicate=True),
+                Output("filter-options-store", "data", allow_duplicate=True)
+            ],
+            Input("start-measurement-btn", "n_clicks"),
+            prevent_initial_call=True
+        )
+        def clear_filter_options_on_measurement(n_clicks):
+            """Clear all filter options when starting area selection."""
+            logger.info("Area Selection started - clearing filter options")
+            
+            empty_options = []
+            empty_values = []
+            empty_store = {}
+            
+            return (empty_options, empty_options, empty_options, empty_options,
+                   empty_values, empty_values, empty_values, empty_values, empty_store)

@@ -38,13 +38,37 @@ class UICallbacks(BaseCallback):
             return ""  # Empty message
 
         @self.app.callback(
-            Output("measurement-status", "children"),
+            [
+                Output("measurement-status", "children"),
+                Output("data-summary", "children", allow_duplicate=True),
+                Output("layer-toggles", "value", allow_duplicate=True),
+                Output("polygon-processed", "data", allow_duplicate=True),
+                Output("streets-processed", "data", allow_duplicate=True),
+                Output("buildings-processed", "data", allow_duplicate=True),
+                Output("filtered-buildings", "data", allow_duplicate=True),
+                Output("network-data", "data", allow_duplicate=True),
+                Output("filter-status", "children", allow_duplicate=True)
+            ],
             Input("start-measurement-btn", "n_clicks"),
             prevent_initial_call=True
         )
         def handle_measurement_button(n_clicks):
-            """Handle measurement button click and provide status."""
-            return ""
+            """Handle measurement button click and clear previous data."""
+            logger.info("Area Selection started - clearing previous data and layers")
+            
+            # Clear data summary
+            empty_summary = "No data available"
+            
+            # Clear all layers
+            empty_layers = []
+            
+            # Clear all data stores
+            empty_data = {}
+            
+            # Clear filter status
+            empty_filter_status = ""
+            
+            return ("", empty_summary, empty_layers, empty_data, empty_data, empty_data, empty_data, empty_data, empty_filter_status)
 
         # Add clientside callback to trigger the JavaScript function
         clientside_callback(
@@ -56,10 +80,15 @@ class UICallbacks(BaseCallback):
 
         @self.app.callback(
             Output("data-summary", "children"),
-            [Input("buildings-processed", "data"), Input("filtered-buildings", "data")]
+            [Input("buildings-processed", "data"), Input("filtered-buildings", "data")],
+            prevent_initial_call=False
         )
         def update_data_summary(buildings_data, filter_data):
             """Update data summary display."""
+            # Return empty message if no data or data is cleared
+            if not buildings_data or not isinstance(buildings_data, dict) or not buildings_data:
+                return "No data available"
+            
             summary_elements = []
             
             if buildings_data and isinstance(buildings_data, dict):
