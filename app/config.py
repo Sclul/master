@@ -30,6 +30,7 @@ class Config:
             "filtered_buildings_path": "./data/filtered_buildings.geojson",
             "network_path": "./data/heating_network.geojson",
             "network_graphml_path": "./data/heating_network.graphml",
+            "network_graphml_path": "./data/heating_network.graphml",
         },
         "heat_demand": {
             "gdb_path": "/gdb/GDB.gdb",
@@ -106,6 +107,7 @@ class Config:
         self.buildings_path = self.config["data_paths"]["buildings_path"]
         self.filtered_buildings_path = self.config["data_paths"]["filtered_buildings_path"]
         self.network_path = self.config["data_paths"]["network_path"]
+        self.network_graphml_path = self.config["data_paths"]["network_graphml_path"]
         
         # Ensure data directory exists
         os.makedirs(self.data_dir, exist_ok=True)
@@ -140,7 +142,8 @@ class Config:
             "streets_path": self.streets_path,
             "buildings_path": self.buildings_path,
             "filtered_buildings_path": self.filtered_buildings_path,
-            "network_path": self.network_path
+            "network_path": self.network_path,
+            "network_graphml_path": self.network_graphml_path
         }
     
     @property

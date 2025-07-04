@@ -7,6 +7,7 @@ from pathlib import Path
 import osmnx as ox # type: ignore
 import geopandas as gpd # type: ignore
 import fiona # type: ignore
+import pandas as pd
 from shapely.geometry import shape, Point # type: ignore
 from shapely.geometry import mapping # type: ignore
 from building_clusterer import BuildingClusterer # type: ignore
@@ -124,6 +125,12 @@ class GeospatialHandler:
             # Create filtered GeoDataFrame with only essential data
             gdf_filtered = gdf_edges[available_columns].copy()
             
+            # Ensure 'name' column is a string, handling lists and None values
+            if 'name' in gdf_filtered.columns:
+                gdf_filtered['name'] = gdf_filtered['name'].apply(
+                    lambda x: ', '.join(x) if isinstance(x, list) else x
+                ).fillna('').astype(str)
+
             # Save filtered GeoJSON
             gdf_filtered.to_file(streets_path, driver="GeoJSON")
             logger.info(f"Streets saved to {streets_path} with columns: {available_columns} (CRS: {gdf_filtered.crs})")

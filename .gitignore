@@ -19,3 +19,4 @@ app/templates/*.compiled
 # Environment files
 .env
 .env.local
+.vscode

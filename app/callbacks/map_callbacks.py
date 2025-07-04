@@ -1,11 +1,14 @@
 """Callbacks for map interactions and layer management."""
 import logging
 import json
+from pathlib import Path
 import geopandas as gpd # type: ignore
 import dash_leaflet as dl # type: ignore
 from dash_extensions.enrich import Input, Output, State, no_update # type: ignore
+from dash import html # type: ignore
 
 from .base_callback import BaseCallback
+from network_constructor import NetworkConstructor
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +16,16 @@ logger = logging.getLogger(__name__)
 class MapCallbacks(BaseCallback):
     """Handles callbacks related to map interactions and layer management."""
     
+    def __init__(self, app, config):
+        """Initialize with Dash app and configuration."""
+        super().__init__(app, config)
+        self.network_constructor = NetworkConstructor(config)
+    
     def _register_callbacks(self):
         """Register map-related callbacks."""
         
         @self.app.callback(
-            Output("data-layers", "children"),
+            [Output("data-layers", "children"), Output("network-status", "children", allow_duplicate=True)],
             [Input("layer-toggles", "value"), Input("network-data", "data"), Input("filtered-buildings", "data")],
         )
         def update_map_layers(selected_layers, network_data, filtered_buildings_data):
@@ -32,8 +40,25 @@ class MapCallbacks(BaseCallback):
             
             logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}, network={show_network}")
             
+            network_status = ""
+            
+            # If network layer is requested, ensure GeoJSON exists
+            if show_network:
+                conversion_result = self._ensure_network_geojson_exists()
+                if conversion_result:
+                    if conversion_result.get("converted"):
+                        network_status = html.Div([
+                            html.P("🔄 Network converted from GraphML to GeoJSON", className="success-message"),
+                            html.P(f"Features: {conversion_result.get('total_features', 0)}", className="info-message")
+                        ])
+                    elif conversion_result.get("error"):
+                        network_status = html.Div(
+                            f"❌ Network conversion error: {conversion_result.get('message')}", 
+                            className="error-message"
+                        )
+            
             layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network)
-            return layers
+            return layers, network_status
 
         @self.app.callback(
             Output("layer-toggles", "value"),
@@ -195,3 +220,54 @@ class MapCallbacks(BaseCallback):
             "heating-network-layer",
             {"color": "orange", "weight": 2, "opacity": 0.8}
         )
+    
+    def _ensure_network_geojson_exists(self):
+        """Ensure network GeoJSON file exists by converting from GraphML if needed."""
+        try:
+            graphml_path = self.data_paths.get("network_graphml_path", "./data/heating_network.graphml")
+            geojson_path = self.data_paths.get("network_path", "./data/heating_network.geojson")
+            
+            graphml_file = Path(graphml_path)
+            geojson_file = Path(geojson_path)
+            
+            # Check if GraphML exists
+            if not graphml_file.exists():
+                logger.warning(f"GraphML file not found: {graphml_path}")
+                return {"error": True, "message": f"GraphML file not found: {graphml_path}"}
+            
+            # Check if GeoJSON needs to be created or updated
+            should_convert = False
+            
+            if not geojson_file.exists():
+                logger.info("GeoJSON file doesn't exist, converting from GraphML")
+                should_convert = True
+            else:
+                # Check if GraphML is newer than GeoJSON
+                graphml_mtime = graphml_file.stat().st_mtime
+                geojson_mtime = geojson_file.stat().st_mtime
+                
+                if graphml_mtime > geojson_mtime:
+                    logger.info("GraphML file is newer than GeoJSON, updating")
+                    should_convert = True
+            
+            # Convert GraphML to GeoJSON if needed
+            if should_convert:
+                logger.info(f"Converting GraphML to GeoJSON: {graphml_path} -> {geojson_path}")
+                result = self.network_constructor.build_network_geojson_from_graphml(
+                    graphml_path=graphml_path,
+                    output_path=geojson_path
+                )
+                
+                if result.get("status") == "success":
+                    logger.info(f"Successfully converted GraphML to GeoJSON with {result.get('total_features', 0)} features")
+                    return {"converted": True, "total_features": result.get('total_features', 0)}
+                else:
+                    logger.error(f"Failed to convert GraphML to GeoJSON: {result.get('message', 'Unknown error')}")
+                    return {"error": True, "message": result.get('message', 'Unknown error')}
+            else:
+                logger.debug("GeoJSON file is up to date")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error ensuring network GeoJSON exists: {e}")
+            return {"error": True, "message": str(e)}

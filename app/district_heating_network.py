@@ -1,13 +1,14 @@
 """District heating network generation functionality."""
-import logging
-import json
 from typing import Dict, Any, Optional, Tuple, List
 from pathlib import Path
-import geopandas as gpd  # type: ignore
+import unicodedata
+from thefuzz import fuzz # type: ignore
 import pandas as pd  # type: ignore
+import geopandas as gpd  # type: ignore
 from shapely.geometry import Point, LineString, MultiLineString  # type: ignore
 from shapely.ops import nearest_points  # type: ignore
-import networkx as nx  # type: ignore
+import logging  # type: ignore
+import networkx as nx # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -86,28 +87,18 @@ class DistrictHeatingNetwork:
                     "message": "No connections could be generated"
                 }
             
-            # Combine streets with connection lines
-            combined_network = self._combine_streets_and_connections(streets_gdf, connection_lines)
-            
-            # Save the combined network as GeoJSON
-            output_path = self.data_paths.get("network_path", "./data/heating_network.geojson")
-            combined_network.to_file(output_path, driver="GeoJSON")
-            
             # Save the network as GraphML with building and junction nodes
             graphml_path = self.data_paths.get("network_graphml_path", "./data/heating_network.graphml")
-            self._save_network_as_graphml(buildings_gdf, combined_network, graphml_path)
+            self._save_network_as_graphml(buildings_gdf, streets_gdf, connection_lines, graphml_path)
             
-            logger.info(f"District heating network saved to: {output_path}")
             logger.info(f"Network GraphML saved to: {graphml_path}")
-            logger.info(f"Network contains {len(combined_network)} features ({len(connection_lines)} connections)")
+            logger.info(f"Generated {len(connection_lines)} building connections")
             
             return {
                 "status": "success",
                 "message": f"Network generated with {len(connection_lines)} building connections",
-                "file_path": output_path,
                 "graphml_path": graphml_path,
-                "connections_count": len(connection_lines),
-                "total_features": len(combined_network)
+                "connections_count": len(connection_lines)
             }
             
         except Exception as e:
@@ -117,7 +108,7 @@ class DistrictHeatingNetwork:
                 "message": str(e)
             }
     
-    def _generate_building_street_connections(self, buildings_gdf: gpd.GeoDataFrame, 
+    def _generate_building_street_connections(self, buildings_gdf: gpd.GeoDataFrame,
                                            streets_gdf: gpd.GeoDataFrame) -> List[Dict[str, Any]]:
         """
         Generate connection lines from buildings to their corresponding streets.
@@ -129,66 +120,134 @@ class DistrictHeatingNetwork:
         no_address_count = 0
         no_matching_street_count = 0
         successful_matches = 0
+
+        # Create a spatial index for all streets
+        all_streets_sindex = streets_gdf.sindex
         
         for idx, building in buildings_gdf.iterrows():
             try:
-                # Get building address information
                 building_street = self._extract_building_street(building)
-                
-                if not building_street:
-                    no_address_count += 1
-                    logger.debug(f"Building {idx} has no street address, connecting to closest street")
-                    
-                    # Get building representative point
-                    building_point = self._get_building_representative_point(building)
-                    
-                    if building_point:
-                        # Connect to closest street regardless of name
-                        shortest_connection = self._find_shortest_connection(building_point, streets_gdf)
-                        
-                        if shortest_connection:
-                            # Mark this as a generic connection
-                            shortest_connection["properties"]["connection_type"] = "building_to_closest_street"
-                            shortest_connection["properties"]["building_street"] = "N/A"
-                            connection_lines.append(shortest_connection)
-                    continue
-                
-                # First try to find matching street(s) by name
-                matching_streets = self._find_matching_streets(building_street, streets_gdf)
-                
-                # Get building representative point
                 building_point = self._get_building_representative_point(building)
-                
+
                 if not building_point:
                     continue
+
+                shortest_connection = None
                 
-                if not matching_streets.empty:
-                    # Found matching street(s), connect to the closest one
-                    shortest_connection = self._find_shortest_connection(building_point, matching_streets)
-                    if shortest_connection:
-                        shortest_connection["properties"]["connection_type"] = "building_to_matching_street"
-                        shortest_connection["properties"]["building_street"] = building_street
-                        connection_lines.append(shortest_connection)
-                        successful_matches += 1
+                if building_street:
+                    matching_streets = self._find_matching_streets(building_street, streets_gdf)
+                    
+                    if not matching_streets.empty:
+                        # Connect to the closest of the matched streets
+                        shortest_connection = self._find_shortest_connection(building_point, matching_streets)
+                        
+                        if shortest_connection:
+                            # Check if the connection point is a junction
+                            connection_point = Point(shortest_connection['geometry'].coords[1])
+                            
+                            # A junction is a point where multiple streets meet. We can identify it if the connection
+                            # point is an endpoint for multiple streets in the full street network.
+                            possible_matches_indices = list(all_streets_sindex.intersection(connection_point.bounds))
+                            possible_matches = streets_gdf.iloc[possible_matches_indices]
+                            
+                            # Find streets that actually contain the connection point
+                            intersecting_streets = possible_matches[possible_matches.intersects(connection_point)]
+
+                            # If more than one street intersects, it's a junction.
+                            if len(intersecting_streets) > 1:
+                                logger.debug(f"Junction detected for building {idx} at matched street. Finding alternative.")
+                                
+                                # Find the two nearest streets to the building
+                                nearest_streets_indices = all_streets_sindex.nearest(building_point, return_all=True, max_distance=None, return_distance=False)
+                                # The returned indices are for the input geometries, we need to map them back to the original GeoDataFrame indices
+                                nearest_geometries_indices = nearest_streets_indices[1]
+                                nearest_streets = streets_gdf.iloc[nearest_geometries_indices[:2]]
+                                
+                                # The matched street is one of them, so we find the *other* one.
+                                matched_street_id = shortest_connection['properties']['street_id']
+                                alternative_street = nearest_streets[nearest_streets.index.astype(str) != matched_street_id]
+
+                                if not alternative_street.empty:
+                                    # Recalculate shortest connection to the alternative street
+                                    alternative_connection = self._find_shortest_connection(building_point, alternative_street)
+                                    if alternative_connection:
+                                        logger.debug(f"Found alternative connection for building {idx} to avoid junction.")
+                                        shortest_connection = alternative_connection
+                                        shortest_connection["properties"]["connection_type"] = "building_to_alternative_street"
+                                    else:
+                                        # Keep original connection if alternative fails
+                                        shortest_connection["properties"]["connection_type"] = "building_to_matching_street_at_junction"
+                                else:
+                                    shortest_connection["properties"]["connection_type"] = "building_to_matching_street_at_junction"
+                            else:
+                                shortest_connection["properties"]["connection_type"] = "building_to_matching_street"
+
+                            shortest_connection["properties"]["building_street"] = building_street
+                            connection_lines.append(shortest_connection)
+                            successful_matches += 1
+                        else:
+                            no_matching_street_count += 1
+                    else:
+                        no_matching_street_count += 1
                 else:
-                    # No matching street found, connect to closest street anyway
-                    no_matching_street_count += 1
-                    logger.debug(f"No matching street found for building at {building_street}, connecting to closest")
-                    
-                    shortest_connection = self._find_shortest_connection(building_point, streets_gdf)
-                    if shortest_connection:
-                        shortest_connection["properties"]["connection_type"] = "building_to_closest_street"
-                        shortest_connection["properties"]["building_street"] = building_street
-                        connection_lines.append(shortest_connection)
-                    
+                    no_address_count += 1
+
+                # Fallback for buildings with no address, or where no match was found
+                if not shortest_connection:
+                    logger.debug(f"Building {idx} (street: {building_street or 'N/A'}) using fallback to closest street.")
+                    fallback_connection = self._find_shortest_connection(building_point, streets_gdf)
+                    if fallback_connection:
+                        fallback_connection["properties"]["connection_type"] = "building_to_closest_street"
+                        fallback_connection["properties"]["building_street"] = building_street or "N/A"
+                        connection_lines.append(fallback_connection)
+
             except Exception as e:
-                logger.warning(f"Error processing building {idx}: {e}")
+                logger.warning(f"Error processing building {idx}: {e}", exc_info=True)
                 continue
         
         logger.info(f"Generated {len(connection_lines)} building-to-street connections")
         logger.info(f"Street name matches: {successful_matches}, No address: {no_address_count}, No matching street: {no_matching_street_count}")
         return connection_lines
     
+    def _pre_process_street_names(self, streets_gdf: gpd.GeoDataFrame) -> pd.Series:
+        """Pre-process and cache street names for faster matching."""
+        if not hasattr(self, '_cached_street_names'):
+            self._cached_street_names: Dict[str, pd.Series] = {}
+
+        # Create a unique cache key based on the streets GeoDataFrame's hash
+        try:
+            cache_key = pd.util.hash_pandas_object(streets_gdf).sum()
+        except TypeError:
+            # Fallback for non-hashable types
+            cache_key = str(streets_gdf)
+
+        if cache_key in self._cached_street_names:
+            return self._cached_street_names[cache_key]
+
+        street_fields = ['name', 'addr:street']
+        all_street_names = []
+
+        for field in street_fields:
+            if field in streets_gdf.columns:
+                # Explode lists/tuples into separate rows and handle NaNs
+                streets_exploded = streets_gdf.explode(field)
+                
+                # Normalize names
+                normalized_names = streets_exploded[field].dropna().apply(self._normalize_street_name)
+                all_street_names.append(normalized_names)
+
+        if not all_street_names:
+            # Return an empty Series with the correct index
+            return pd.Series(dtype=str, index=streets_gdf.index)
+
+        # Concatenate all normalized names and drop duplicates at the same index
+        processed_series = pd.concat(all_street_names).groupby(level=0).first()
+        
+        # Cache the result
+        self._cached_street_names[cache_key] = processed_series
+        
+        return processed_series
+
     def _extract_building_street(self, building_row: pd.Series) -> Optional[str]:
         """Extract street name from building data."""
         # Check common street address fields
@@ -196,33 +255,67 @@ class DistrictHeatingNetwork:
         
         for field in street_fields:
             if field in building_row and pd.notna(building_row[field]):
-                return str(building_row[field]).strip()
+                return str(building_row[field])
         
         return None
     
+    def _normalize_street_name(self, street_name: str) -> str:
+        """Normalize street name for better matching."""
+        if not isinstance(street_name, str):
+            return ""
+        name = street_name.lower().strip()
+        name = unicodedata.normalize('NFC', name)
+        name = name.replace('ß', 'ss')
+        name = name.replace('str.', 'strasse')
+        name = name.replace('str ', 'strasse ')
+        name = name.replace('straße', 'strasse')
+        return name
+
     def _find_matching_streets(self, building_street: str, streets_gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        """Find streets that match the building's street address."""
-        # Check common street name fields in streets data
-        street_fields = ['name', 'highway', 'street_name', 'addr:street']
+        """Find streets that match the building's street address using fuzzy matching."""
         
-        matching_streets = gpd.GeoDataFrame()
+        # Normalize building street name
+        building_street_lower = self._normalize_street_name(building_street)
         
-        for field in street_fields:
-            if field in streets_gdf.columns:
-                # Case-insensitive partial matching
-                mask = streets_gdf[field].astype(str).str.contains(
-                    building_street, case=False, na=False, regex=False
-                )
-                matches = streets_gdf[mask]
-                
-                if not matches.empty:
-                    matching_streets = pd.concat([matching_streets, matches]).drop_duplicates()
+        # Get pre-processed street names
+        normalized_street_names = self._pre_process_street_names(streets_gdf)
         
-        return matching_streets
-    
+        if normalized_street_names.empty:
+            return gpd.GeoDataFrame()
+
+        # Calculate fuzzy scores
+        scores = normalized_street_names.apply(
+            lambda street_name: fuzz.partial_ratio(building_street_lower, street_name)
+        )
+        
+        # Find the best match
+        best_match_idx = scores.idxmax()
+        best_match_score = scores.max()
+
+        if best_match_score > 85:  # Use a more permissive threshold with partial_ratio
+            logger.debug(f"Best fuzzy match for '{building_street_lower}': '{normalized_street_names.loc[best_match_idx]}' (Score: {best_match_score})")
+            return streets_gdf.loc[[best_match_idx]]
+            
+        return gpd.GeoDataFrame()
+
     def _get_building_representative_point(self, building_row: pd.Series) -> Optional[Point]:
-        """Get a representative point for the building geometry."""
+        """Get the representative point of a building's geometry."""
         try:
+            # First try to use the pre-computed representative_point from the geojson
+            if 'representative_point' in building_row and pd.notna(building_row['representative_point']):
+                rep_point_data = building_row['representative_point']
+                
+                # Handle the case where representative_point is stored as a dictionary
+                if isinstance(rep_point_data, dict) and 'coordinates' in rep_point_data:
+                    coords = rep_point_data['coordinates']
+                    if len(coords) >= 2:
+                        return Point(coords[0], coords[1])
+                
+                # Handle the case where it's already a Point geometry
+                elif hasattr(rep_point_data, 'x') and hasattr(rep_point_data, 'y'):
+                    return rep_point_data
+            
+            # Fallback to geometry centroid if representative_point is not available
             geometry = building_row.geometry
             if geometry and not geometry.is_empty:
                 # Use centroid for polygons, or the point itself for points
@@ -230,6 +323,7 @@ class DistrictHeatingNetwork:
                     return geometry.centroid
                 else:
                     return geometry
+                    
         except Exception as e:
             logger.debug(f"Error getting building representative point: {e}")
         
@@ -278,59 +372,27 @@ class DistrictHeatingNetwork:
                 continue
         
         return best_connection
-    
-    def _combine_streets_and_connections(self, streets_gdf: gpd.GeoDataFrame, 
-                                       connection_lines: List[Dict[str, Any]]) -> gpd.GeoDataFrame:
-        """Combine streets and connection lines into a single GeoDataFrame."""
-        
-        # Create GeoDataFrame for connections
-        if connection_lines:
-            connection_geometries = [conn["geometry"] for conn in connection_lines]
-            connection_properties = [conn["properties"] for conn in connection_lines]
-            
-            connections_gdf = gpd.GeoDataFrame(
-                connection_properties, 
-                geometry=connection_geometries,
-                crs=streets_gdf.crs
-            )
-            
-            # Add a type column to distinguish streets from connections
-            streets_gdf_copy = streets_gdf.copy()
-            streets_gdf_copy['feature_type'] = 'street'
-            connections_gdf['feature_type'] = 'connection'
-            
-            # Ensure both DataFrames have compatible columns
-            # Add missing columns with default values
-            for col in connections_gdf.columns:
-                if col not in streets_gdf_copy.columns and col != 'geometry':
-                    streets_gdf_copy[col] = None
-            
-            for col in streets_gdf_copy.columns:
-                if col not in connections_gdf.columns and col != 'geometry':
-                    connections_gdf[col] = None
-            
-            # Combine both GeoDataFrames
-            combined_gdf = pd.concat([streets_gdf_copy, connections_gdf], ignore_index=True)
-            combined_gdf = gpd.GeoDataFrame(combined_gdf, crs=streets_gdf.crs)
-            
-        else:
-            # If no connections, just return streets with feature_type column
-            combined_gdf = streets_gdf.copy()
-            combined_gdf['feature_type'] = 'street'
-        
-        return combined_gdf
 
     def _save_network_as_graphml(self, buildings_gdf: gpd.GeoDataFrame, 
-                               combined_network: gpd.GeoDataFrame, 
+                               streets_gdf: gpd.GeoDataFrame,
+                               connection_lines: List[Dict[str, Any]], 
                                graphml_path: str) -> None:
         """Save the heating network as GraphML with building and junction nodes."""
         try:
             # Create a directed graph
             G = nx.DiGraph()
             
-            # Extract streets and connections
-            streets = combined_network[combined_network['feature_type'] == 'street']
-            connections = combined_network[combined_network['feature_type'] == 'connection']
+            # Create GeoDataFrame for connections if they exist
+            if connection_lines:
+                connection_geometries = [conn["geometry"] for conn in connection_lines]
+                connection_properties = [conn["properties"] for conn in connection_lines]
+                connections_gdf = gpd.GeoDataFrame(
+                    connection_properties, 
+                    geometry=connection_geometries,
+                    crs=streets_gdf.crs
+                )
+            else:
+                connections_gdf = gpd.GeoDataFrame()
             
             # Node ID counters
             node_id = 0
@@ -370,7 +432,7 @@ class DistrictHeatingNetwork:
             junction_coords = set()
             
             # Collect all street endpoints and intersections
-            for idx, street in streets.iterrows():
+            for idx, street in streets_gdf.iterrows():
                 try:
                     geometry = street.geometry
                     if geometry and not geometry.is_empty:
@@ -404,7 +466,7 @@ class DistrictHeatingNetwork:
                 node_id += 1
             
             # Add street edges between junctions
-            for idx, street in streets.iterrows():
+            for idx, street in streets_gdf.iterrows():
                 try:
                     geometry = street.geometry
                     if geometry and not geometry.is_empty:
@@ -451,7 +513,7 @@ class DistrictHeatingNetwork:
                     continue
             
             # Add building-to-street connection edges
-            for idx, connection in connections.iterrows():
+            for idx, connection in connections_gdf.iterrows():
                 try:
                     geometry = connection.geometry
                     if geometry and isinstance(geometry, LineString):
