@@ -62,3 +62,7 @@ building_filters:
 # Building clustering configuration
 building_clustering:
   auto_apply: true   # Automatically apply clustering when processing buildings
+
+# Network generation configuration
+network_generation:
+  max_connection_distance: 50.0  # Maximum allowed distance (in meters) for building-to-street connections
