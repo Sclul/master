@@ -47,7 +47,8 @@ class UICallbacks(BaseCallback):
                 Output("buildings-processed", "data", allow_duplicate=True),
                 Output("filtered-buildings", "data", allow_duplicate=True),
                 Output("network-data", "data", allow_duplicate=True),
-                Output("filter-status", "children", allow_duplicate=True)
+                Output("filter-status", "children", allow_duplicate=True),
+                Output("filtered-network-data", "data", allow_duplicate=True)
             ],
             Input("start-measurement-btn", "n_clicks"),
             prevent_initial_call=True
@@ -68,7 +69,7 @@ class UICallbacks(BaseCallback):
             # Clear filter status
             empty_filter_status = ""
             
-            return ("", empty_summary, empty_layers, empty_data, empty_data, empty_data, empty_data, empty_data, empty_filter_status)
+            return ("", empty_summary, empty_layers, empty_data, empty_data, empty_data, empty_data, empty_data, empty_filter_status, empty_data)
 
         # Add clientside callback to trigger the JavaScript function
         clientside_callback(

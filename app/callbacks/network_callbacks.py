@@ -26,10 +26,13 @@ class NetworkCallbacks(BaseCallback):
                 Output("network-data", "data")
             ],
             Input("generate-network-btn", "n_clicks"),
-            State("filtered-buildings", "data"),
+            [
+                State("filtered-buildings", "data"),
+                State("max-connection-distance-generation-input", "value")
+            ],
             prevent_initial_call=True
         )
-        def generate_network(n_clicks, filtered_buildings_data):
+        def generate_network(n_clicks, filtered_buildings_data, max_connection_distance):
             """Generate district heating network when button is clicked."""
             if not n_clicks:
                 return no_update, no_update
@@ -44,10 +47,24 @@ class NetworkCallbacks(BaseCallback):
                     filtered_buildings_data.get("status") == "saved"
                 )
                 
+                # Update the network generation settings with the UI value
+                if max_connection_distance is not None and max_connection_distance > 0:
+                    # Temporarily override the config setting
+                    original_distance = self.network_generator.network_settings.get("max_connection_distance")
+                    self.network_generator.network_settings["max_connection_distance"] = max_connection_distance
+                    logger.info(f"Using max connection distance: {max_connection_distance}m")
+                
                 # Generate the network
                 result = self.network_generator.connect_buildings_to_streets(
                     use_filtered_buildings=use_filtered
                 )
+                
+                # Restore original setting
+                if max_connection_distance is not None and max_connection_distance > 0:
+                    if original_distance is not None:
+                        self.network_generator.network_settings["max_connection_distance"] = original_distance
+                    else:
+                        self.network_generator.network_settings.pop("max_connection_distance", None)
                 
                 # Update status display
                 if result.get("status") == "success":
