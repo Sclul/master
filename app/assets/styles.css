@@ -1357,21 +1357,6 @@ input:focus,
 .icon-info::before { content: "ℹ️"; }
 .icon-menu::before { content: "☰"; }
 
-/* ===== NETWORK FILTER COMPONENTS ===== */
-.network-filter-section {
-    background: var(--gray-50);
-    border-radius: 8px;
-    padding: var(--space-4);
-    margin-bottom: var(--space-4);
-}
-
-.network-filter-section h4 {
-    color: var(--gray-700);
-    margin: 0 0 var(--space-4) 0;
-    font-size: var(--text-base);
-    font-weight: 600;
-}
-
 .filter-item {
     margin-bottom: var(--space-3);
 }
@@ -1406,72 +1391,4 @@ input:focus,
     outline: none;
     border-color: var(--blue-500);
     box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.1);
-}
-
-/* Network filter status messages */
-.network-filter-status {
-    margin-top: var(--space-3);
-    padding: var(--space-3);
-    border-radius: 6px;
-    font-size: var(--text-sm);
-}
-
-.network-filter-status.success {
-    background: var(--green-50);
-    color: var(--green-700);
-    border: 1px solid var(--green-200);
-}
-
-.network-filter-status.error {
-    background: var(--red-50);
-    color: var(--red-700);
-    border: 1px solid var(--red-200);
-}
-
-/* Filtered network summary */
-.filtered-network-summary {
-    background: var(--blue-50);
-    border: 1px solid var(--blue-200);
-    border-radius: 6px;
-    padding: var(--space-3);
-    font-size: var(--text-sm);
-}
-
-.filtered-network-summary p {
-    margin: 0 0 var(--space-2) 0;
-}
-
-.filtered-network-summary p:last-child {
-    margin-bottom: 0;
-}
-
-/* Network filter dropdowns */
-.network-filter-dropdown {
-    width: 100%;
-    border: 1px solid var(--gray-300);
-    border-radius: 4px;
-    background: white;
-}
-
-.network-filter-dropdown:focus-within {
-    border-color: var(--blue-500);
-    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.1);
-}
-
-/* Network filter checkboxes */
-.network-filter-checkbox {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-}
-
-.network-filter-checkbox input[type="checkbox"] {
-    accent-color: var(--blue-500);
-}
-
-.network-filter-checkbox label {
-    font-size: var(--text-sm);
-    color: var(--gray-700);
-    cursor: pointer;
 }

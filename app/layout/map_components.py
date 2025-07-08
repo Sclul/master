@@ -61,7 +61,6 @@ def create_map_component(config=None):
                     {"label": "Buildings", "value": "buildings"},
                     {"label": "Filtered", "value": "filtered"},
                     {"label": "Network", "value": "network"},
-                    {"label": "Filtered Network", "value": "filtered_network"},
                 ],
                 value=[],
                 className="map-layer-controls"

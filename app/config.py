@@ -30,7 +30,6 @@ class Config:
             "filtered_buildings_path": "./data/filtered_buildings.geojson",
             "network_path": "./data/heating_network.geojson",
             "network_graphml_path": "./data/heating_network.graphml",
-            "filtered_network_graphml_path": "./data/filtered_heating_network.graphml",
         },
         "heat_demand": {
             "gdb_path": "/gdb/GDB.gdb",

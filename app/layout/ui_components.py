@@ -126,29 +126,7 @@ def create_control_panel(config=None):
         ], className="control-group"),
 
 
-        # Network Filters
-        html.Section([
-            html.H4("Network Filters"),
-            
-            html.Button("Apply Network Filters", id="apply-network-filters-btn", className="btn-primary"),
-            html.Div(id="network-filter-status"),
 
-            html.Div([
-                dcc.Checklist(
-                    id="exclude-unconnected-nodes-checklist",
-                    options=[{"label": "Exclude unconnected nodes", "value": "exclude"}],
-                    value=[]
-                )
-            ]),
-
-            html.Div([
-                dcc.Checklist(
-                    id="show-streets-only-filter",
-                    options=[{"label": "Show streets only", "value": "streets_only"}],
-                    value=[]
-                )
-            ]),
-        ], className="control-group"),
 
     ], className="control-panel")
 
@@ -163,10 +141,5 @@ def create_status_panel():
         html.Section([
             html.H4("Data Summary"),
             html.Div(id="data-summary", className="summary-area")
-        ]),
-        
-        html.Section([
-            html.H4("Filtered Network"),
-            html.Div(id="filtered-network-summary", className="summary-area")
         ]),
     ], className="status-panel")
