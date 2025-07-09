@@ -9,6 +9,7 @@ from shapely.geometry import Point, LineString, MultiLineString  # type: ignore
 from shapely.ops import nearest_points  # type: ignore
 import logging  # type: ignore
 import networkx as nx # type: ignore
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -123,9 +124,12 @@ class DistrictHeatingNetwork:
                                all_streets_sindex, stats: Dict[str, int]) -> Optional[Dict[str, Any]]:
         """Process a single building to create street connection."""
         building_street = self._extract_building_street(building)
+        logger.debug(f"Processing building {idx} with street address: {building_street}")
+        
         building_point = self._get_building_representative_point(building)
         
         if not building_point:
+            logger.warning(f"Could not get representative point for building {idx}")
             return None
         
         # Try to match building to named street
@@ -235,6 +239,19 @@ class DistrictHeatingNetwork:
         logger.info(f"Street name matches: {stats['successful_matches']}, "
                    f"No address: {stats['no_address']}, "
                    f"No matching street: {stats['no_matching_street']}")
+        
+        # Log representative point usage statistics
+        if hasattr(self, '_rep_point_stats'):
+            rep_stats = self._rep_point_stats
+            total = rep_stats['rep_points'] + rep_stats['centroids']
+            logger.info(f"📊 Representative Point Usage:")
+            logger.info(f"   ✅ Pre-computed representative points: {rep_stats['rep_points']} ({rep_stats['rep_points']/total*100:.1f}%)")
+            logger.info(f"   ⚠️ Geometry centroids (fallback): {rep_stats['centroids']} ({rep_stats['centroids']/total*100:.1f}%)")
+            
+            if rep_stats['centroids'] > 0:
+                logger.warning(f"Some buildings ({rep_stats['centroids']}) are using centroid fallback instead of representative points.")
+            else:
+                logger.info("🎉 All buildings are using pre-computed representative points!")
     
     def _pre_process_street_names(self, streets_gdf: gpd.GeoDataFrame) -> pd.Series:
         """Pre-process and cache street names for faster matching."""
@@ -318,27 +335,43 @@ class DistrictHeatingNetwork:
     def _get_building_representative_point(self, building_row: pd.Series) -> Optional[Point]:
         """Get the representative point of a building's geometry."""
         try:
-            # Try pre-computed representative_point first
-            if 'representative_point' in building_row and pd.notna(building_row['representative_point']):
+            # Check for pre-computed representative_point first
+            if 'representative_point' in building_row.index and pd.notna(building_row['representative_point']):
                 rep_point_data = building_row['representative_point']
                 
-                # Handle dictionary format
-                if isinstance(rep_point_data, dict) and 'coordinates' in rep_point_data:
-                    coords = rep_point_data['coordinates']
-                    if len(coords) >= 2:
-                        return Point(coords[0], coords[1])
                 
-                # Handle Point geometry
-                elif hasattr(rep_point_data, 'x') and hasattr(rep_point_data, 'y'):
-                    return rep_point_data
+                # Handle string representation that might need parsing
+                if isinstance(rep_point_data, str):
+                    # Try to parse if it's a string representation
+                    try:
+                        parsed_data = json.loads(rep_point_data)
+                        if isinstance(parsed_data, dict) and 'coordinates' in parsed_data:
+                            coords = parsed_data['coordinates']
+                            if len(coords) >= 2:
+                                point = Point(coords[0], coords[1])
+                                if not hasattr(self, '_rep_point_stats'):
+                                    self._rep_point_stats = {'rep_points': 0, 'centroids': 0}
+                                self._rep_point_stats['rep_points'] += 1
+                                return point
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                
             
             # Fallback to geometry centroid
             geometry = building_row.geometry
             if geometry and not geometry.is_empty:
-                return geometry.centroid if hasattr(geometry, 'centroid') else geometry
+                centroid = geometry.centroid if hasattr(geometry, 'centroid') else geometry
+                # Count centroid usage
+                if not hasattr(self, '_rep_point_stats'):
+                    self._rep_point_stats = {'rep_points': 0, 'centroids': 0}
+                self._rep_point_stats['centroids'] += 1
+                logger.warning(f"⚠️ Using geometry centroid as fallback: ({centroid.x:.1f}, {centroid.y:.1f})")
+                return centroid
+            else:
+                logger.error("❌ No valid geometry found for building")
                     
         except Exception as e:
-            logger.debug(f"Error getting building representative point: {e}")
+            logger.error(f"❌ Error getting building representative point: {e}")
         
         return None
     
