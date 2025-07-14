@@ -4,7 +4,8 @@ from dash_extensions.enrich import Input, Output, State, no_update # type: ignor
 from dash import html # type: ignore
 
 from .base_callback import BaseCallback
-from district_heating_network import DistrictHeatingNetwork
+from network_constructor import NetworkConstructor
+from street_network_generator import StreetNetworkGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,8 @@ class NetworkCallbacks(BaseCallback):
     def __init__(self, app, config):
         """Initialize with Dash app and configuration."""
         super().__init__(app, config)
-        self.network_generator = DistrictHeatingNetwork(config)
+        self.network_constructor = NetworkConstructor(config)
+        self.street_network_generator = StreetNetworkGenerator(config)
         
     def _register_callbacks(self):
         """Register network-related callbacks."""
@@ -33,44 +35,23 @@ class NetworkCallbacks(BaseCallback):
             prevent_initial_call=True
         )
         def generate_network(n_clicks, filtered_buildings_data, max_connection_distance):
-            """Generate district heating network when button is clicked."""
+            """Generate street network with nodes for every coordinate when button is clicked."""
             if not n_clicks:
                 return no_update, no_update
             
             try:
-                logger.info("Starting network generation")
+                logger.info("Starting street network generation")
                 
-                # Check if we should use filtered buildings
-                use_filtered = (
-                    filtered_buildings_data and 
-                    isinstance(filtered_buildings_data, dict) and 
-                    filtered_buildings_data.get("status") == "saved"
-                )
-                
-                # Update the network generation settings with the UI value
-                if max_connection_distance is not None and max_connection_distance > 0:
-                    # Temporarily override the config setting
-                    original_distance = self.network_generator.network_settings.get("max_connection_distance")
-                    self.network_generator.network_settings["max_connection_distance"] = max_connection_distance
-                    logger.info(f"Using max connection distance: {max_connection_distance}m")
-                
-                # Generate the network
-                result = self.network_generator.connect_buildings_to_streets(
-                    use_filtered_buildings=use_filtered
-                )
-                
-                # Restore original setting
-                if max_connection_distance is not None and max_connection_distance > 0:
-                    if original_distance is not None:
-                        self.network_generator.network_settings["max_connection_distance"] = original_distance
-                    else:
-                        self.network_generator.network_settings.pop("max_connection_distance", None)
+                # Generate the street network with nodes for every coordinate
+                result = self.street_network_generator.generate_street_network()
                 
                 # Update status display
                 if result.get("status") == "success":
                     status_message = html.Div([
                         html.P(f"✅ {result.get('message')}", className="success-message"),
-                        html.P(f"Total network features: {result.get('total_features', 0)}", 
+                        html.P(f"Total nodes: {result.get('total_nodes', 0)}", 
+                              className="info-message"),
+                        html.P(f"Total edges: {result.get('total_edges', 0)}", 
                               className="info-message")
                     ])
                     
@@ -78,15 +59,15 @@ class NetworkCallbacks(BaseCallback):
                     
                 else:
                     error_message = html.Div(
-                        f"❌ Network generation failed: {result.get('message')}", 
+                        f"❌ Street network generation failed: {result.get('message')}", 
                         className="error-message"
                     )
                     return error_message, result
                     
             except Exception as e:
-                logger.error(f"Error in network generation callback: {e}")
+                logger.error(f"Error in street network generation callback: {e}")
                 error_message = html.Div(
-                    f"❌ Network generation error: {str(e)}", 
+                    f"❌ Street network generation error: {str(e)}", 
                     className="error-message"
                 )
                 return error_message, {"status": "error", "message": str(e)}

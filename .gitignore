@@ -20,5 +20,6 @@ app/templates/*.compiled
 .env
 .env.local
 .vscode
+.github
 
 ToDo
