@@ -1,5 +1,6 @@
 """Street network generator for creating GraphML from street coordinates."""
 import logging
+import json
 from typing import Dict, Any, List, Tuple
 from pathlib import Path
 import geopandas as gpd  # type: ignore
@@ -221,7 +222,25 @@ class StreetNetworkGenerator:
         next_node_id = max(G.nodes) + 1 if G.nodes else 0
 
         for idx, building in buildings_gdf.iterrows():
-            building_point = building.geometry.centroid
+            # Use representative_point coordinates from building properties instead of centroid
+            rep_point_data = building.get('representative_point')
+            
+            # Try to extract coordinates from representative_point
+            building_point = None
+            if rep_point_data and isinstance(rep_point_data, str):
+                # Handle case where representative_point might be stored as a string
+                try:
+                    parsed_data = json.loads(rep_point_data)
+                    if isinstance(parsed_data, dict) and 'coordinates' in parsed_data:
+                        coords = parsed_data['coordinates']
+                        if len(coords) >= 2:
+                            building_point = Point(coords[0], coords[1])
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    pass
+            
+            # Fallback to centroid if representative_point is not available or invalid
+            if building_point is None:
+                building_point = building.geometry.centroid
             
             # Find the nearest street segment
             nearest_edge_idx = edges_gs.distance(building_point).idxmin()
