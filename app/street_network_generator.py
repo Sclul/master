@@ -23,7 +23,8 @@ class StreetNetworkGenerator:
     def generate_street_network(self) -> Dict[str, Any]:
         """
         Generate GraphML network with nodes for every street coordinate.
-        
+        Automatically uses filtered buildings if they exist, otherwise falls back to regular buildings.
+
         Returns:
             Dict with status and file information
         """
@@ -58,15 +59,28 @@ class StreetNetworkGenerator:
             edge_count = self._create_edges_from_streets(G, streets_gdf)
             
             # Connect buildings to the network
-            buildings_path = self.data_paths.get("buildings_path", "./data/buildings.geojson")
-            if Path(buildings_path).exists():
+            # Check if filtered buildings exist, otherwise use regular buildings
+            filtered_buildings_path = self.data_paths.get("filtered_buildings_path", "./data/filtered_buildings.geojson")
+            regular_buildings_path = self.data_paths.get("buildings_path", "./data/buildings.geojson")
+            
+            if Path(filtered_buildings_path).exists():
+                buildings_path = filtered_buildings_path
+                logger.info(f"Using filtered buildings file: {filtered_buildings_path}")
+            elif Path(regular_buildings_path).exists():
+                buildings_path = regular_buildings_path
+                logger.info(f"Using regular buildings file: {regular_buildings_path}")
+            else:
+                logger.warning(f"No buildings file found at {filtered_buildings_path} or {regular_buildings_path}, skipping building connections.")
+                buildings_path = None
+            
+            if buildings_path:
                 buildings_gdf = gpd.read_file(buildings_path)
                 if not buildings_gdf.empty:
                     G, new_nodes, net_new_edges = self._connect_buildings_with_bisection(G, buildings_gdf)
                     node_count += new_nodes
                     edge_count += net_new_edges
-            else:
-                logger.warning(f"Buildings file not found at {buildings_path}, skipping building connections.")
+                else:
+                    logger.warning(f"Buildings file {buildings_path} is empty, skipping building connections.")
 
             # Clean up None values before writing to GraphML
             self._clean_graph_for_graphml(G)
