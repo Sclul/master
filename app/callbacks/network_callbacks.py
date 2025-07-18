@@ -5,7 +5,7 @@ from dash import html # type: ignore
 
 from .base_callback import BaseCallback
 from network_constructor import NetworkConstructor
-from street_network_generator import StreetNetworkGenerator
+from graph_generator import GraphGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ class NetworkCallbacks(BaseCallback):
         """Initialize with Dash app and configuration."""
         super().__init__(app, config)
         self.network_constructor = NetworkConstructor(config)
-        self.street_network_generator = StreetNetworkGenerator(config)
+        self.graph_generator = GraphGenerator(config)
         
     def _register_callbacks(self):
         """Register network-related callbacks."""
@@ -43,7 +43,7 @@ class NetworkCallbacks(BaseCallback):
                 logger.info("Starting street network generation")
                 
                 # Generate the street network with nodes for every coordinate
-                result = self.street_network_generator.generate_street_network()
+                result = self.graph_generator.generate_graph()
                 
                 # Update status display
                 if result.get("status") == "success":

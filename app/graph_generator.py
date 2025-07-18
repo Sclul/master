@@ -1,4 +1,4 @@
-"""Street network generator for creating GraphML from street coordinates."""
+"""Graph generator for creating GraphML from street coordinates."""
 import logging
 import json
 from typing import Dict, Any, List, Tuple
@@ -11,7 +11,7 @@ import json
 logger = logging.getLogger(__name__)
 
 
-class StreetNetworkGenerator:
+class GraphGenerator:
     """Generates GraphML network with nodes for every street line string coordinate."""
     
     def __init__(self, config):
@@ -19,9 +19,9 @@ class StreetNetworkGenerator:
         self.config = config
         self.data_paths = config.data_paths
         
-        logger.info("StreetNetworkGenerator initialized")
+        logger.info("GraphGenerator initialized")
     
-    def generate_street_network(self) -> Dict[str, Any]:
+    def generate_graph(self) -> Dict[str, Any]:
         """
         Generate GraphML network with nodes for every street coordinate.
         Automatically uses filtered buildings if they exist, otherwise falls back to regular buildings.
@@ -93,19 +93,19 @@ class StreetNetworkGenerator:
             
             nx.write_graphml(G, output_path)
             
-            logger.info(f"Street network GraphML saved to: {output_path}")
+            logger.info(f"Graph network GraphML saved to: {output_path}")
             logger.info(f"Network contains {node_count} nodes and {edge_count} edges")
             
             return {
                 "status": "success",
-                "message": f"Street network generated with {node_count} nodes and {edge_count} edges",
+                "message": f"Graph network generated with {node_count} nodes and {edge_count} edges",
                 "file_path": output_path,
                 "total_nodes": node_count,
                 "total_edges": edge_count
             }
             
         except Exception as e:
-            logger.error(f"Error generating street network: {e}")
+            logger.error(f"Error generating graph network: {e}")
             return {
                 "status": "error",
                 "message": str(e)
