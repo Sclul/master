@@ -313,6 +313,24 @@ body {
     margin-left: 8px;
 }
 
+.btn-secondary {
+    background: #718096;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
+.btn-secondary:hover {
+    background: #4a5568;
+}
+
 button {
     padding: var(--space-3) var(--space-4);
     border: none;
@@ -464,6 +482,28 @@ button {
 .dropdown-filter .Select-option.is-selected {
     background-color: #667eea;
     color: white;
+}
+
+.dropdown-small {
+    width: 100%;
+}
+
+.dropdown-small .Select-control {
+    border: 1px solid #cbd5e0 !important;
+    border-radius: 4px !important;
+    min-height: 36px !important;
+    font-size: 0.875rem !important;
+    background: white !important;
+    transition: border-color 0.2s !important;
+}
+
+.dropdown-small .Select-control:hover {
+    border-color: #a0aec0 !important;
+}
+
+.dropdown-small .Select-control.is-focused {
+    border-color: #4299e1 !important;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1) !important;
 }
 
 /* Checklists */
@@ -699,6 +739,12 @@ button {
     margin: 0.5rem 0;
     font-size: 0.9rem;
     animation: slideInFade 0.3s ease-out;
+}
+
+.status-message {
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+    min-height: 1.2em;
 }
 
 /* ===== MODERN FORM CONTROLS ===== */

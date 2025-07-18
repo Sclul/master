@@ -30,6 +30,8 @@ class Config:
             "filtered_buildings_path": "../data/filtered_buildings.geojson",
             "network_path": "../data/heating_network.geojson",
             "network_graphml_path": "../data/heating_network.graphml",
+            "filtered_network_graphml_path": "../data/filtered_heating_network.graphml",
+            "filtered_network_path": "../data/filtered_heating_network.geojson",
         },
         "heat_demand": {
             "gdb_path": "/gdb/GDB.gdb",
@@ -61,6 +63,14 @@ class Config:
         },
         "building_clustering": {
             "auto_apply": True
+        },
+        "graph_filters": {
+            "max_building_connection_distance": 20.0,
+            "default_pruning_algorithm": "minimum_spanning_tree",
+            "pruning_algorithms": {
+                "minimum_spanning_tree": {"preserve_critical_nodes": True},
+                "shortest_path_optimization": {}
+            }
         }
     }
     
@@ -107,6 +117,8 @@ class Config:
         self.filtered_buildings_path = self.config["data_paths"]["filtered_buildings_path"]
         self.network_path = self.config["data_paths"]["network_path"]
         self.network_graphml_path = self.config["data_paths"]["network_graphml_path"]
+        self.filtered_network_graphml_path = self.config["data_paths"].get("filtered_network_graphml_path", "./data/filtered_heating_network.graphml")
+        self.filtered_network_path = self.config["data_paths"].get("filtered_network_path", "./data/filtered_heating_network.geojson")
         
         # Ensure data directory exists
         os.makedirs(self.data_dir, exist_ok=True)
@@ -142,7 +154,9 @@ class Config:
             "buildings_path": self.buildings_path,
             "filtered_buildings_path": self.filtered_buildings_path,
             "network_path": self.network_path,
-            "network_graphml_path": self.network_graphml_path
+            "network_graphml_path": self.network_graphml_path,
+            "filtered_network_graphml_path": self.filtered_network_graphml_path,
+            "filtered_network_path": self.filtered_network_path
         }
     
     @property
@@ -171,4 +185,16 @@ class Config:
             "postcodes": [""],
             "cities": [""],
             "building_uses": [""]
+        })
+    
+    @property
+    def graph_filters(self) -> Dict[str, Any]:
+        """Get graph filters from config."""
+        return self.config.get("graph_filters", {
+            "max_building_connection_distance": 20.0,
+            "default_pruning_algorithm": "minimum_spanning_tree",
+            "pruning_algorithms": {
+                "minimum_spanning_tree": {"preserve_critical_nodes": True},
+                "shortest_path_optimization": {}
+            }
         })

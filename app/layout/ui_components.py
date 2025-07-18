@@ -29,23 +29,41 @@ def create_control_panel(config=None):
         html.Section([
             html.H4("District Heating Network"),
             html.Button("Generate Network", id="generate-network-btn", className="btn-primary"),
+            html.Div(id="network-status")
+        ], className="control-group"),
+        
+        # Graph optimization
+        html.Section([
+            html.H4("Graph Optimization"),
+            html.Button("Optimize Network", id="optimize-network-btn", className="btn-primary"),
+            html.Div(id="network-optimization-status"),
             
             html.Div([
-                html.Label("Max Building Connection (m):"),
+                html.Label("Max Building Connection Distance (m):"),
                 dcc.Input(
-                    id="max-connection-distance-generation-input",
+                    id="max-building-connection-input",
                     type="number",
-                    placeholder="e.g., 50",
-                    value=50.0,
+                    placeholder="e.g., 100",
+                    value=config.graph_filters.get("max_building_connection_distance", 100.0) if config else 100.0,
+                    min=0,
                     className="input-small"
                 )
             ], className="input-group"),
             
-
-            html.Div(id="network-status")
+            html.Div([
+                html.Label("Network Optimization:"),
+                dcc.Dropdown(
+                    id="pruning-algorithm-dropdown",
+                    options=[
+                        {"label": "None", "value": "none"},
+                        {"label": "Minimum Spanning Tree", "value": "minimum_spanning_tree"},
+                        {"label": "Shortest Path Optimization", "value": "shortest_path_optimization"}
+                    ],
+                    value=config.graph_filters.get("default_pruning_algorithm", "none") if config else "none",
+                    className="dropdown-small"
+                )
+            ], className="input-group")
         ], className="control-group"),
-        
-        # Apply filters button
         
         # Heat demand filters
         html.Section([
@@ -125,12 +143,7 @@ def create_control_panel(config=None):
             ], className="filter-item"),
         ], className="control-group"),
 
-
-
-
     ], className="control-panel")
-
-
 
 
 def create_status_panel():

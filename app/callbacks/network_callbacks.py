@@ -6,6 +6,7 @@ from dash import html # type: ignore
 from .base_callback import BaseCallback
 from network_constructor import NetworkConstructor
 from graph_generator import GraphGenerator
+from graph_filter import GraphFilter
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class NetworkCallbacks(BaseCallback):
         super().__init__(app, config)
         self.network_constructor = NetworkConstructor(config)
         self.graph_generator = GraphGenerator(config)
+        self.graph_filter = GraphFilter(config)
         
     def _register_callbacks(self):
         """Register network-related callbacks."""
@@ -28,13 +30,10 @@ class NetworkCallbacks(BaseCallback):
                 Output("network-data", "data")
             ],
             Input("generate-network-btn", "n_clicks"),
-            [
-                State("filtered-buildings", "data"),
-                State("max-connection-distance-generation-input", "value")
-            ],
+            State("filtered-buildings", "data"),
             prevent_initial_call=True
         )
-        def generate_network(n_clicks, filtered_buildings_data, max_connection_distance):
+        def generate_network(n_clicks, filtered_buildings_data):
             """Generate street network with nodes for every coordinate when button is clicked."""
             if not n_clicks:
                 return no_update, no_update
@@ -81,3 +80,56 @@ class NetworkCallbacks(BaseCallback):
             """Clear network status when starting area selection."""
             logger.info("Area Selection started - clearing network status")
             return ""
+        
+        @self.app.callback(
+            [Output("network-optimization-status", "children"),
+             Output("network-data", "data", allow_duplicate=True)],
+            [Input("optimize-network-btn", "n_clicks")],
+            [State("max-building-connection-input", "value"),
+             State("pruning-algorithm-dropdown", "value")],
+            prevent_initial_call=True
+        )
+        def optimize_network(n_clicks, max_connection, pruning_algo):
+            """Handle network optimization."""
+            if not n_clicks:
+                return no_update, no_update
+            
+            try:
+                # Apply graph filtering and optimization
+                result = self.graph_filter.filter_and_optimize_graph(
+                    max_building_connection=max_connection,
+                    pruning_algorithm=pruning_algo if pruning_algo != "none" else None
+                )
+                
+                if result["status"] == "success":
+                    # Convert optimized GraphML to GeoJSON for visualization
+                    geojson_result = self.network_constructor.build_network_geojson_from_graphml(
+                        graphml_path=result["file_path"],
+                        output_path=self.config.data_paths.get("filtered_network_path", "./data/filtered_heating_network.geojson")
+                    )
+                    
+                    # Display optimization results
+                    status_msg = html.Div([
+                        html.P(f"✓ Network optimized successfully", className="success-message"),
+                        html.P(f"Nodes: {result['initial_stats']['total_nodes']} → {result['final_stats']['total_nodes']} ({result['node_reduction_percentage']}% reduction)"),
+                        html.P(f"Edges: {result['initial_stats']['total_edges']} → {result['final_stats']['total_edges']} ({result['edge_reduction_percentage']}% reduction)"),
+                        html.P(f"Heat demand preserved: {result['final_stats']['total_heat_demand']} kW")
+                    ])
+                    
+                    # Update network data to trigger map update
+                    if geojson_result["status"] == "success":
+                        network_data = {
+                            "status": "success",
+                            "message": "Network optimized and converted to GeoJSON",
+                            "file_path": geojson_result["file_path"],
+                            "optimization_stats": result
+                        }
+                        return status_msg, network_data
+                    else:
+                        return status_msg, no_update
+                else:
+                    return html.P(f"✗ Error: {result['message']}", className="error-message"), no_update
+                    
+            except Exception as e:
+                logger.error(f"Error optimizing network: {e}")
+                return html.P(f"✗ Error: {str(e)}", className="error-message"), no_update

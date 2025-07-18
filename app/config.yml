@@ -25,6 +25,8 @@ data_paths:
   filtered_buildings_path: "./data/filtered_buildings.geojson"
   network_path: "./data/heating_network.geojson"
   network_graphml_path: "./data/heating_network.graphml"
+  filtered_network_graphml_path: "./data/filtered_heating_network.graphml"
+  filtered_network_path: "./data/filtered_heating_network.geojson"
 
 # Heat demand configuration
 heat_demand:
@@ -63,6 +65,18 @@ building_filters:
 building_clustering:
   auto_apply: true   # Automatically apply clustering when processing buildings
 
-# Network generation configuration
-network_generation:
-  max_connection_distance: 50.0  # Maximum allowed distance (in meters) for building-to-street connections
+
+# Graph filtering and optimization settings
+graph_filters:
+  max_building_connection_distance: 20.0  # meters
+  default_pruning_algorithm: "None"
+  
+  pruning_algorithms:
+    minimum_spanning_tree:
+      preserve_critical_nodes: true
+      
+    shortest_path_optimization:
+      # No specific parameters needed
+      
+
+      

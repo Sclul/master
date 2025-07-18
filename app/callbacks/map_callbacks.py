@@ -37,8 +37,9 @@ class MapCallbacks(BaseCallback):
             show_buildings = "buildings" in selected_layers
             show_filtered = "filtered" in selected_layers
             show_network = "network" in selected_layers
+            show_filtered_network = "filtered_network" in selected_layers
             
-            logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}, network={show_network}")
+            logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}, network={show_network}, filtered_network={show_filtered_network}")
             
             network_status = ""
             
@@ -57,11 +58,26 @@ class MapCallbacks(BaseCallback):
                             className="error-message"
                         )
             
-            layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network)
+            # If filtered network layer is requested, ensure GeoJSON exists
+            if show_filtered_network:
+                conversion_result = self._ensure_filtered_network_geojson_exists()
+                if conversion_result:
+                    if conversion_result.get("converted"):
+                        network_status = html.Div([
+                            html.P("🔄 Filtered Network converted from GraphML to GeoJSON", className="success-message"),
+                            html.P(f"Features: {conversion_result.get('total_features', 0)}", className="info-message")
+                        ])
+                    elif conversion_result.get("error"):
+                        network_status = html.Div(
+                            f"❌ Filtered Network conversion error: {conversion_result.get('message')}", 
+                            className="error-message"
+                        )
+            
+            layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network, show_filtered_network)
             return layers, network_status
 
         @self.app.callback(
-            Output("layer-toggles", "value"),
+            Output("layer-toggles", "value", allow_duplicate=True),
             Input("filtered-buildings", "data"),
             State("layer-toggles", "value"),
             prevent_initial_call=True
@@ -87,18 +103,28 @@ class MapCallbacks(BaseCallback):
             State("layer-toggles", "value"),
             prevent_initial_call=True
         )
-        def auto_enable_network_layer(network_data, current_selected_layers):
-            """Auto-enable network layer when network is successfully generated."""
+        def auto_enable_network_layers(network_data, current_selected_layers):
+            """Auto-enable network layers when network is generated or optimized."""
             if not network_data or not isinstance(network_data, dict):
                 return no_update
             
-            # Only auto-enable if network was just generated successfully
+            updated_layers = (current_selected_layers or []).copy()
+            
+            # Check if network was just generated successfully
             if network_data.get("status") == "success":
-                updated_layers = (current_selected_layers or []).copy()
-                if "network" not in updated_layers:
-                    updated_layers.append("network")
-                    logger.info("Auto-enabling network layer after successful network generation")
-                    return updated_layers
+                # If network has optimization stats, enable filtered network layer
+                if (network_data.get("optimization_stats") and
+                    network_data.get("optimization_stats", {}).get("status") == "success"):
+                    if "filtered_network" not in updated_layers:
+                        updated_layers.append("filtered_network")
+                        logger.info("Auto-enabling filtered network layer after successful network optimization")
+                        return updated_layers
+                else:
+                    # Otherwise, enable regular network layer
+                    if "network" not in updated_layers:
+                        updated_layers.append("network")
+                        logger.info("Auto-enabling network layer after successful network generation")
+                        return updated_layers
             
             return no_update
 
@@ -131,7 +157,7 @@ class MapCallbacks(BaseCallback):
             """Display current zoom level."""
             return f"Zoom: {zoom}" if zoom else "Zoom: Unknown"
     
-    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False):
+    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False, show_filtered_network=False):
         """Build only the data layers (not base map components)."""
         layers = []
         
@@ -158,6 +184,12 @@ class MapCallbacks(BaseCallback):
             if network_layer is not None:
                 layers.append(network_layer)
                 logger.info("Added heating network layer to map")
+        
+        if show_filtered_network:
+            filtered_network_layer = self._create_filtered_network_layer()
+            if filtered_network_layer is not None:
+                layers.append(filtered_network_layer)
+                logger.info("Added filtered heating network layer to map")
         
         logger.info(f"Total data layers built: {len(layers)}")
         return layers
@@ -215,17 +247,40 @@ class MapCallbacks(BaseCallback):
     
     def _create_network_layer(self):
         """Create heating network layer from saved data."""
+        regular_network_path = self.data_paths.get("network_path", "./data/heating_network.geojson")
+        
         return self._create_layer_from_file(
-            self.data_paths.get("network_path", "./data/heating_network.geojson"),
+            regular_network_path,
             "heating-network-layer",
             {"color": "orange", "weight": 2, "opacity": 0.8}
+        )
+    
+    def _create_filtered_network_layer(self):
+        """Create filtered heating network layer from saved data."""
+        filtered_network_path = self.data_paths.get("filtered_network_path", "./data/filtered_heating_network.geojson")
+        
+        return self._create_layer_from_file(
+            filtered_network_path,
+            "filtered-heating-network-layer",
+            {"color": "red", "weight": 3, "opacity": 0.9}  # Different style for optimized network
         )
     
     def _ensure_network_geojson_exists(self):
         """Ensure network GeoJSON file exists by converting from GraphML if needed."""
         try:
-            graphml_path = self.data_paths.get("network_graphml_path", "./data/heating_network.graphml")
-            geojson_path = self.data_paths.get("network_path", "./data/heating_network.geojson")
+            # Check for filtered network first
+            filtered_graphml_path = self.data_paths.get("filtered_network_graphml_path", "./data/filtered_heating_network.graphml")
+            filtered_geojson_path = self.data_paths.get("filtered_network_path", "./data/filtered_heating_network.geojson")
+            
+            # If filtered network exists, use it
+            if Path(filtered_graphml_path).exists():
+                graphml_path = filtered_graphml_path
+                geojson_path = filtered_geojson_path
+                logger.info("Using filtered network for visualization")
+            else:
+                # Fall back to regular network
+                graphml_path = self.data_paths.get("network_graphml_path", "./data/heating_network.graphml")
+                geojson_path = self.data_paths.get("network_path", "./data/heating_network.geojson")
             
             graphml_file = Path(graphml_path)
             geojson_file = Path(geojson_path)
@@ -270,4 +325,55 @@ class MapCallbacks(BaseCallback):
                 
         except Exception as e:
             logger.error(f"Error ensuring network GeoJSON exists: {e}")
+            return {"error": True, "message": str(e)}
+    
+    def _ensure_filtered_network_geojson_exists(self):
+        """Ensure filtered network GeoJSON file exists by converting from GraphML if needed."""
+        try:
+            filtered_graphml_path = self.data_paths.get("filtered_network_graphml_path", "./data/filtered_heating_network.graphml")
+            filtered_geojson_path = self.data_paths.get("filtered_network_path", "./data/filtered_heating_network.geojson")
+            
+            graphml_file = Path(filtered_graphml_path)
+            geojson_file = Path(filtered_geojson_path)
+            
+            # Check if GraphML exists
+            if not graphml_file.exists():
+                logger.warning(f"Filtered GraphML file not found: {filtered_graphml_path}")
+                return {"error": True, "message": f"Filtered GraphML file not found: {filtered_graphml_path}"}
+            
+            # Check if GeoJSON needs to be created or updated
+            should_convert = False
+            
+            if not geojson_file.exists():
+                logger.info("Filtered GeoJSON file doesn't exist, converting from GraphML")
+                should_convert = True
+            else:
+                # Check if GraphML is newer than GeoJSON
+                graphml_mtime = graphml_file.stat().st_mtime
+                geojson_mtime = geojson_file.stat().st_mtime
+                
+                if graphml_mtime > geojson_mtime:
+                    logger.info("Filtered GraphML file is newer than GeoJSON, updating")
+                    should_convert = True
+            
+            # Convert GraphML to GeoJSON if needed
+            if should_convert:
+                logger.info(f"Converting filtered GraphML to GeoJSON: {filtered_graphml_path} -> {filtered_geojson_path}")
+                result = self.network_constructor.build_network_geojson_from_graphml(
+                    graphml_path=filtered_graphml_path,
+                    output_path=filtered_geojson_path
+                )
+                
+                if result.get("status") == "success":
+                    logger.info(f"Successfully converted filtered GraphML to GeoJSON with {result.get('total_features', 0)} features")
+                    return {"converted": True, "total_features": result.get('total_features', 0)}
+                else:
+                    logger.error(f"Failed to convert filtered GraphML to GeoJSON: {result.get('message', 'Unknown error')}")
+                    return {"error": True, "message": result.get('message', 'Unknown error')}
+            else:
+                logger.debug("Filtered GeoJSON file is up to date")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error ensuring filtered network GeoJSON exists: {e}")
             return {"error": True, "message": str(e)}
