@@ -255,7 +255,23 @@ class GraphGenerator:
             next_node_id += 1
             
             building_node_id = next_node_id
-            G.add_node(building_node_id, x=building_point.x, y=building_point.y, node_type='building', osmid=building.get('osmid', 'unknown'))
+            # Get heat demand from building data
+            heat_demand = building.get('heat_demand', 0.0)
+            # Ensure heat_demand is a valid numeric value for GraphML
+            if heat_demand is None or heat_demand == '':
+                heat_demand = 0.0
+            else:
+                try:
+                    heat_demand = float(heat_demand)
+                except (ValueError, TypeError):
+                    heat_demand = 0.0
+            
+            G.add_node(building_node_id, 
+                      x=building_point.x, 
+                      y=building_point.y, 
+                      node_type='building', 
+                      osmid=building.get('osmid', 'unknown'),
+                      heat_demand=heat_demand)
             next_node_id += 1
             new_nodes_added += 2
             
