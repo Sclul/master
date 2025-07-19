@@ -99,7 +99,14 @@ class MinimumSpanningTreePruner(PruningAlgorithm):
             mst_graph.add_edge(u, v, **data)
             total_length += data.get('length', 0)
         
-        # Step 6: Calculate statistics
+        # Step 6: Remove end nodes that are not buildings
+        nodes_before_cleanup = mst_graph.number_of_nodes()
+        removed_end_nodes = self._remove_non_building_end_nodes(mst_graph)
+        nodes_after_cleanup = mst_graph.number_of_nodes()
+        
+        logger.info(f"MST cleanup: {nodes_before_cleanup} -> {nodes_after_cleanup} nodes ({removed_end_nodes} end nodes removed)")
+        
+        # Step 7: Calculate statistics
         original_length = sum(data.get('length', 0) for _, _, data in G.edges(data=True))
         connected_buildings = len([n for n in building_nodes if mst_graph.has_node(n)])
         
@@ -110,6 +117,7 @@ class MinimumSpanningTreePruner(PruningAlgorithm):
             "mst_edges": mst_graph.number_of_edges(),
             "total_buildings": len(building_nodes),
             "connected_buildings": connected_buildings,
+            "removed_end_nodes": removed_end_nodes,
             "total_length": total_length,
             "original_total_length": original_length,
             "length_reduction": original_length - total_length,
@@ -117,6 +125,42 @@ class MinimumSpanningTreePruner(PruningAlgorithm):
         }
         
         return mst_graph, stats
+
+    def _remove_non_building_end_nodes(self, G: nx.Graph) -> int:
+        """
+        Remove end nodes (degree = 1) that are not buildings.
+        Continues iteratively until no more non-building end nodes exist.
+        
+        Args:
+            G: Graph to modify in-place
+            
+        Returns:
+            Number of nodes removed
+        """
+        removed_count = 0
+        
+        while True:
+            # Find end nodes that are not buildings
+            end_nodes_to_remove = []
+            
+            for node in G.nodes():
+                if G.degree(node) == 1:  # End node (degree = 1)
+                    node_type = G.nodes[node].get('node_type', 'unknown')
+                    if node_type != 'building':
+                        end_nodes_to_remove.append(node)
+            
+            # If no more end nodes to remove, we're done
+            if not end_nodes_to_remove:
+                break
+            
+            # Remove the end nodes
+            G.remove_nodes_from(end_nodes_to_remove)
+            removed_count += len(end_nodes_to_remove)
+            
+            logger.info(f"Removed {len(end_nodes_to_remove)} non-building end nodes")
+        
+        logger.info(f"Total non-building end nodes removed: {removed_count}")
+        return removed_count
 
 
 
