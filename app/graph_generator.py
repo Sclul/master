@@ -50,14 +50,10 @@ class GraphGenerator:
             
             logger.info(f"Loaded {len(streets_gdf)} street features")
             
-            # Create network graph
-            G = nx.Graph()
-            
-            # Extract coordinates and create nodes
-            node_count = self._create_nodes_from_streets(G, streets_gdf)
-            
-            # Create edges between consecutive nodes in each street
-            edge_count = self._create_edges_from_streets(G, streets_gdf)
+            # Create network graph using u/v endpoints + all intermediate coordinates
+            G = self._generate_street_network(streets_gdf)
+            node_count = G.number_of_nodes()
+            edge_count = G.number_of_edges()
             
             # Connect buildings to the network
             # Check if filtered buildings exist, otherwise use regular buildings
@@ -195,69 +191,113 @@ class GraphGenerator:
     
     def _connect_buildings_with_bisection(self, G: nx.Graph, buildings_gdf: gpd.GeoDataFrame) -> Tuple[nx.Graph, int, int]:
         """
-        Connects buildings to the nearest street segment using bisection.
-        For each building, it finds the closest street edge, creates a new node on that edge,
-        and connects the building to this new node.
-
-        Args:
-            G: The NetworkX graph representing the street network.
-            buildings_gdf: A GeoDataFrame containing building footprints.
-
-        Returns:
-            A tuple containing the updated graph, the number of new nodes added,
-            and the net number of new edges added.
+        Connects buildings to the nearest street segment using true bisection method.
+        Each building connection splits the nearest street segment into two new segments.
         """
         new_nodes_added = 0
         net_edges_added = 0
         
-        street_edges = [(u, v, data) for u, v, data in G.edges(data=True) if data.get('edge_type') == 'street_segment']
-        
-        if not street_edges:
-            logger.warning("No street segments found in the graph to connect buildings to.")
-            return G, 0, 0
-
-        edge_lines = [LineString([Point(G.nodes[u]['x'], G.nodes[u]['y']), Point(G.nodes[v]['x'], G.nodes[v]['y'])]) for u, v, _ in street_edges]
-        edges_gs = gpd.GeoSeries(edge_lines)
-        
         next_node_id = max(G.nodes) + 1 if G.nodes else 0
+        successful_connections = 0
+        failed_connections = 0
 
         for idx, building in buildings_gdf.iterrows():
+            logger.info(f"Processing building {idx}")
+            
             # Use representative_point coordinates from building properties instead of centroid
             rep_point_data = building.get('representative_point')
             
             # Try to extract coordinates from representative_point
             building_point = None
             if rep_point_data and isinstance(rep_point_data, str):
-                # Handle case where representative_point might be stored as a string
                 try:
                     parsed_data = json.loads(rep_point_data)
                     if isinstance(parsed_data, dict) and 'coordinates' in parsed_data:
                         coords = parsed_data['coordinates']
                         if len(coords) >= 2:
                             building_point = Point(coords[0], coords[1])
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    pass
+                            logger.info(f"Building {idx}: Using representative point {coords}")
+                except (json.JSONDecodeError, KeyError, IndexError) as e:
+                    logger.warning(f"Building {idx}: Error parsing representative_point: {e}")
             
             # Fallback to centroid if representative_point is not available or invalid
             if building_point is None:
                 building_point = building.geometry.centroid
+                logger.info(f"Building {idx}: Falling back to centroid {building_point.x}, {building_point.y}")
             
-            # Find the nearest street segment
-            nearest_edge_idx = edges_gs.distance(building_point).idxmin()
-            u, v, edge_data = street_edges[nearest_edge_idx]
-            closest_edge_line = edges_gs.iloc[nearest_edge_idx]
-
-            # Create a new node on the segment
+            # Get current street edges (this updates as we add new segments)
+            street_edges = [(u, v, data) for u, v, data in G.edges(data=True) if data.get('edge_type') == 'street_segment']
+            
+            if not street_edges:
+                logger.warning(f"Building {idx}: No street segments found in current graph")
+                failed_connections += 1
+                continue
+            
+            # Create geometries for current street edges
+            edge_lines = []
+            edge_info = []
+            for u, v, data in street_edges:
+                line = LineString([Point(G.nodes[u]['x'], G.nodes[u]['y']), Point(G.nodes[v]['x'], G.nodes[v]['y'])])
+                edge_lines.append(line)
+                edge_info.append((u, v, data))
+            
+            edges_gs = gpd.GeoSeries(edge_lines)
+            
+            # Find the nearest street segment to this building
+            distances = edges_gs.distance(building_point)
+            nearest_edge_idx = distances.idxmin()
+            min_distance = distances.iloc[nearest_edge_idx]
+            
+            logger.info(f"Building {idx}: Nearest edge distance = {min_distance:.2f}m")
+            
+            u, v, edge_data = edge_info[nearest_edge_idx]
+            closest_edge_line = edge_lines[nearest_edge_idx]
+            
+            # Step 1: Identify the closest segment (B-C in the example)
+            logger.info(f"Building {idx}: Connecting to segment {u}-{v}")
+            
+            # Step 2: Create a new connection point (Z in the example)
             new_point_on_line = closest_edge_line.interpolate(closest_edge_line.project(building_point))
             
             z_node_id = next_node_id
-            G.add_node(z_node_id, x=new_point_on_line.x, y=new_point_on_line.y, node_type='street_connection', street_id=edge_data.get('street_id', 'unknown'))
+            G.add_node(z_node_id, 
+                      x=new_point_on_line.x, 
+                      y=new_point_on_line.y, 
+                      node_type='street_connection', 
+                      street_id=edge_data.get('street_id', 'unknown'))
             next_node_id += 1
+            new_nodes_added += 1
             
+            # Step 3: Restructure the network - Remove original segment B-C
+            if not G.has_edge(u, v):
+                logger.warning(f"Building {idx}: Edge {u}-{v} not found in graph")
+                failed_connections += 1
+                continue
+            
+            # Remove the original edge B-C
+            G.remove_edge(u, v)
+            
+            # Step 4: Split into two segments: B-Z and Z-C
+            dist_u_z = Point(G.nodes[u]['x'], G.nodes[u]['y']).distance(new_point_on_line)
+            dist_z_v = new_point_on_line.distance(Point(G.nodes[v]['x'], G.nodes[v]['y']))
+            
+            # Create copies of edge_data without the length key to avoid conflicts
+            edge_data_copy = {k: v for k, v in edge_data.items() if k != 'length'}
+            
+            # Add new segments B-Z and Z-C
+            G.add_edge(u, z_node_id, length=dist_u_z, **edge_data_copy)
+            G.add_edge(z_node_id, v, length=dist_z_v, **edge_data_copy)
+            
+            # Net change: -1 original edge + 2 new edges = +1 edge
+            net_edges_added += 1;
+            
+            logger.info(f"Building {idx}: Split edge {u}-{v} into {u}-{z_node_id} and {z_node_id}-{v}")
+            
+            # Step 5: Connect the building to the new node Z
             building_node_id = next_node_id
+            
             # Get heat demand from building data
             heat_demand = building.get('heat_demand', 0.0)
-            # Ensure heat_demand is a valid numeric value for GraphML
             if heat_demand is None or heat_demand == '':
                 heat_demand = 0.0
             else:
@@ -273,31 +313,33 @@ class GraphGenerator:
                       osmid=building.get('osmid', 'unknown'),
                       heat_demand=heat_demand)
             next_node_id += 1
-            new_nodes_added += 2
+            new_nodes_added += 1
             
-            # Check if the edge still exists before removing it
-            if G.has_edge(u, v):
-                # Remove original edge and add new ones
-                G.remove_edge(u, v)
-                
-                dist_u_z = Point(G.nodes[u]['x'], G.nodes[u]['y']).distance(new_point_on_line)
-                dist_z_v = new_point_on_line.distance(Point(G.nodes[v]['x'], G.nodes[v]['y']))
-                
-                # Create copies of edge_data without the length key to avoid conflicts
-                edge_data_copy = {k: v for k, v in edge_data.items() if k != 'length'}
-                
-                G.add_edge(u, z_node_id, length=dist_u_z, **edge_data_copy)
-                G.add_edge(z_node_id, v, length=dist_z_v, **edge_data_copy)
-            else:
-                logger.warning(f"Edge {u}-{v} not found in graph, skipping building connection for building {idx}")
-            
+            # Connect building to the connection point Z
             dist_building_z = building_point.distance(new_point_on_line)
             G.add_edge(building_node_id, z_node_id, edge_type='building_connection', length=dist_building_z)
+            net_edges_added += 1
             
-            # Net change in edges is +2 (1 removed, 3 added)
-            net_edges_added += 2
+            logger.info(f"Building {idx}: Connected building {building_node_id} to connection point {z_node_id}")
+            successful_connections += 1
 
-        logger.info(f"Connected {len(buildings_gdf)} buildings, adding {new_nodes_added} nodes and a net of {net_edges_added} edges.")
+        logger.info(f"Building connections complete:")
+        logger.info(f"  - Successful connections: {successful_connections}")
+        logger.info(f"  - Failed connections: {failed_connections}")
+        logger.info(f"  - Total buildings processed: {len(buildings_gdf)}")
+        logger.info(f"  - Nodes added: {new_nodes_added}")
+        logger.info(f"  - Net edges added: {net_edges_added}")
+        
+        # Verify connectivity after building connections
+        if G.number_of_nodes() > 0:
+            components = list(nx.connected_components(G))
+            logger.info(f"After building connections: {len(components)} connected components")
+            
+            building_nodes = [n for n, data in G.nodes(data=True) if data.get('node_type') == 'building']
+            for i, component in enumerate(components):
+                buildings_in_component = [n for n in component if n in building_nodes]
+                logger.info(f"  Component {i}: {len(component)} nodes, {len(buildings_in_component)} buildings")
+
         return G, new_nodes_added, net_edges_added
 
     def _extract_coordinates_from_geometry(self, geometry) -> List[Tuple[float, float]]:
@@ -330,3 +372,87 @@ class GraphGenerator:
             none_keys = [k for k, v in data.items() if v is None]
             for k in none_keys:
                 data.pop(k)
+    
+    def _generate_street_network(self, streets_gdf: gpd.GeoDataFrame) -> nx.Graph:
+        """Generate single connected street network using coordinate-based nodes."""
+        G = nx.Graph()
+        
+        logger.info(f"Processing {len(streets_gdf)} street features for coordinate-based network")
+        
+        # Phase 1: Extract all unique coordinates and create mapping
+        coord_to_node = {}
+        node_id = 0
+        
+        # First pass: collect all unique coordinates
+        for idx, street in streets_gdf.iterrows():
+            if not isinstance(street.geometry, LineString):
+                logger.warning(f"Street {idx}: Invalid geometry type")
+                continue
+                
+            coords = list(street.geometry.coords)
+            for x, y in coords:
+                coord_key = (x, y)
+                if coord_key not in coord_to_node:
+                    coord_to_node[coord_key] = node_id
+                    node_id += 1
+        
+        logger.info(f"Found {len(coord_to_node)} unique coordinates")
+        
+        # Phase 2: Create nodes for all unique coordinates
+        for (x, y), node_id in coord_to_node.items():
+            G.add_node(node_id,
+                      x=x,
+                      y=y,
+                      node_type='coordinate')
+        
+        # Phase 3: Create edges following street geometries
+        edge_count = 0
+        for idx, street in streets_gdf.iterrows():
+            if not isinstance(street.geometry, LineString):
+                continue
+                
+            coords = list(street.geometry.coords)
+            if len(coords) < 2:
+                continue
+                
+            street_name = street.get('name', f'Street_{idx}')
+            highway_type = street.get('highway', 'residential')
+            
+            # Create edges between consecutive coordinates
+            for i in range(len(coords) - 1):
+                source_coord = coords[i]
+                target_coord = coords[i + 1]
+                
+                source_node = coord_to_node[source_coord]
+                target_node = coord_to_node[target_coord]
+                
+                # Calculate edge length
+                point1 = Point(source_coord)
+                point2 = Point(target_coord)
+                edge_length = point1.distance(point2)
+                
+                G.add_edge(source_node, target_node,
+                          edge_type='street_segment',
+                          street_id=str(idx),
+                          street_name=street_name,
+                          highway=highway_type,
+                          length=edge_length,
+                          segment_index=i)
+                
+                edge_count += 1
+        
+        logger.info(f"Generated coordinate-based network: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+        
+        # Phase 4: Verify connectivity
+        if G.number_of_nodes() > 0:
+            components = list(nx.connected_components(G))
+            logger.info(f"Network has {len(components)} connected components")
+            if len(components) == 1:
+                logger.info("✅ Successfully created single connected network!")
+            else:
+                largest_component = max(components, key=len)
+                logger.info(f"Largest component: {len(largest_component)} nodes")
+                for i, component in enumerate(components):
+                    logger.info(f"Component {i}: {len(component)} nodes")
+        
+        return G

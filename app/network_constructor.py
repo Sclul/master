@@ -187,6 +187,77 @@ class NetworkConstructor:
         
         return gdf
     
+    def _create_network_edges_geojson(self, G: nx.Graph) -> gpd.GeoDataFrame:
+        """Convert NetworkX graph edges to GeoDataFrame, grouping street segments by original street."""
+        edges_data = []
+        
+        # Group edges by original street to reconstruct continuous lines
+        street_groups = {}
+        for u, v, data in G.edges(data=True):
+            edge_type = data.get('edge_type', 'unknown')
+            
+            if edge_type == 'street_segment':
+                street_id = data.get('street_id', 'unknown')
+                if street_id not in street_groups:
+                    street_groups[street_id] = []
+                
+                # Get coordinates for this edge
+                u_coords = (G.nodes[u]['x'], G.nodes[u]['y'])
+                v_coords = (G.nodes[v]['x'], G.nodes[v]['y'])
+                
+                street_groups[street_id].append({
+                    'u': u, 'v': v, 'data': data,
+                    'u_coords': u_coords, 'v_coords': v_coords,
+                    'segment_index': data.get('segment_index', 0)
+                })
+            else:
+                # Keep building connections as individual edges
+                u_coords = (G.nodes[u]['x'], G.nodes[u]['y'])
+                v_coords = (G.nodes[v]['x'], G.nodes[v]['y'])
+                
+                line = LineString([u_coords, v_coords])
+                edges_data.append({
+                    'geometry': line,
+                    'edge_type': edge_type,
+                    'length': data.get('length', 0),
+                    'u': u, 'v': v,
+                    **{k: v for k, v in data.items() if k not in ['length']}
+                })
+        
+        # Reconstruct continuous street lines
+        for street_id, segments in street_groups.items():
+            if not segments:
+                continue
+                
+            # Sort segments by segment_index to maintain order
+            segments.sort(key=lambda x: x['segment_index'])
+            
+            # Build continuous coordinate list
+            coords = [segments[0]['u_coords']]
+            for segment in segments:
+                coords.append(segment['v_coords'])
+            
+            # Create single LineString for entire street
+            if len(coords) >= 2:
+                line = LineString(coords)
+                sample_data = segments[0]['data']
+                
+                edges_data.append({
+                    'geometry': line,
+                    'edge_type': 'street_line',
+                    'street_id': street_id,
+                    'street_name': sample_data.get('street_name', 'Unknown'),
+                    'highway': sample_data.get('highway', 'residential'),
+                    'length': sum(seg['data'].get('length', 0) for seg in segments),
+                    'segment_count': len(segments)
+                })
+        
+        if not edges_data:
+            logger.warning("No edges to convert")
+            return gpd.GeoDataFrame()
+        
+        return gpd.GeoDataFrame(edges_data)
+    
     def get_network_statistics(self, graphml_path: Optional[str] = None) -> Dict[str, Any]:
         """
         Get statistics about the network from GraphML file.

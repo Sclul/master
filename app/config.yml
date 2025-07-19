@@ -69,7 +69,7 @@ building_clustering:
 # Graph filtering and optimization settings
 graph_filters:
   max_building_connection_distance: 20.0  # meters
-  default_pruning_algorithm: "None"
+  default_pruning_algorithm: "minimum_spanning_tree"
   
   pruning_algorithms:
     minimum_spanning_tree:
