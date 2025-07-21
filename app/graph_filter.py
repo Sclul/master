@@ -164,8 +164,8 @@ class MinimumSpanningTreePruner(PruningAlgorithm):
 
 
 
-class ShortestPathOptimizationPruner(PruningAlgorithm):
-    """Optimize network using shortest path algorithms."""
+class AllBuildingConnectionsPruner(PruningAlgorithm):
+    """Ensure all buildings are connected via optimal paths."""
     
     def prune(self, G: nx.Graph, **kwargs) -> Tuple[nx.Graph, Dict[str, Any]]:
         """Optimize network by keeping only shortest paths between buildings."""
@@ -208,7 +208,7 @@ class ShortestPathOptimizationPruner(PruningAlgorithm):
         optimized_graph.remove_nodes_from(isolated_nodes)
         
         stats = {
-            "algorithm": "shortest_path_optimization",
+            "algorithm": "all_building_connections",
             "original_edges": G.number_of_edges(),
             "remaining_edges": optimized_graph.number_of_edges(),
             "removed_edges": G.number_of_edges() - optimized_graph.number_of_edges(),
@@ -237,7 +237,7 @@ class GraphFilter:
         """Register available pruning algorithms."""
         return {
             "minimum_spanning_tree": MinimumSpanningTreePruner(),
-            "shortest_path_optimization": ShortestPathOptimizationPruner()
+            "all_building_connections": AllBuildingConnectionsPruner()
         }
     
     def filter_and_optimize_graph(self, 
@@ -287,6 +287,10 @@ class GraphFilter:
                 logger.info(f"Applying pruning algorithm: {pruning_algorithm}")
                 if pruning_params is None:
                     pruning_params = self.filter_settings.get("pruning_algorithms", {}).get(pruning_algorithm, {})
+                
+                # Ensure pruning_params is never None
+                if pruning_params is None:
+                    pruning_params = {}
                 
                 logger.info(f"Pruning parameters: {pruning_params}")
                 pruner = self.pruning_algorithms[pruning_algorithm]

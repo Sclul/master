@@ -69,7 +69,7 @@ class Config:
             "default_pruning_algorithm": "minimum_spanning_tree",
             "pruning_algorithms": {
                 "minimum_spanning_tree": {"preserve_critical_nodes": True},
-                "shortest_path_optimization": {}
+                "all_building_connections": {}
             }
         }
     }
@@ -195,6 +195,6 @@ class Config:
             "default_pruning_algorithm": "minimum_spanning_tree",
             "pruning_algorithms": {
                 "minimum_spanning_tree": {"preserve_critical_nodes": True},
-                "shortest_path_optimization": {}
+                "all_building_connections": {}
             }
         })

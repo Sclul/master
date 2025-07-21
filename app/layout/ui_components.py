@@ -57,7 +57,7 @@ def create_control_panel(config=None):
                     options=[
                         {"label": "None", "value": "none"},
                         {"label": "Minimum Spanning Tree", "value": "minimum_spanning_tree"},
-                        {"label": "Shortest Path Optimization", "value": "shortest_path_optimization"}
+                        {"label": "All Building Connections", "value": "all_building_connections"}
                     ],
                     value=config.graph_filters.get("default_pruning_algorithm", "none") if config else "none",
                     className="dropdown-small"
