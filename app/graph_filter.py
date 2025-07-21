@@ -286,6 +286,234 @@ class AllBuildingConnectionsPruner(PruningAlgorithm):
         return optimized_graph, stats
 
 
+class SteinerTreePruner(PruningAlgorithm):
+    """Create Steiner tree connecting all buildings with minimal total infrastructure cost."""
+    
+    def prune(self, G: nx.Graph, **kwargs) -> Tuple[nx.Graph, Dict[str, Any]]:
+        """Create Steiner tree that connects all buildings using minimum cost infrastructure."""
+        
+        if G.number_of_nodes() == 0:
+            return G, {"message": "Empty graph"}
+        
+        # Step 1: Identify building nodes (terminal nodes for Steiner tree)
+        building_nodes = [n for n, data in G.nodes(data=True) 
+                         if data.get('node_type') == 'building']
+        
+        if len(building_nodes) < 2:
+            return G, {"message": f"Need at least 2 buildings for Steiner tree, found {len(building_nodes)}"}
+        
+        # DEBUG: Check building connectivity
+        logger.info(f"Total buildings found: {len(building_nodes)}")
+        
+        # Check if buildings are connected to the network
+        connected_buildings = []
+        isolated_buildings = []
+        for building in building_nodes:
+            if G.degree(building) > 0:
+                connected_buildings.append(building)
+            else:
+                isolated_buildings.append(building)
+        
+        logger.info(f"Connected buildings: {len(connected_buildings)}")
+        logger.info(f"Isolated buildings: {len(isolated_buildings)}")
+        
+        # Check connected components before Steiner tree construction
+        if not nx.is_connected(G):
+            components = list(nx.connected_components(G))
+            logger.info(f"Graph has {len(components)} connected components")
+            
+            # Log component sizes and building counts
+            for i, component in enumerate(components):
+                buildings_in_component = [n for n in component if G.nodes[n].get('node_type') == 'building']
+                logger.info(f"Component {i}: {len(component)} nodes, {len(buildings_in_component)} buildings")
+        
+        # Step 2: Ensure all edges have weights (use 'length' attribute)
+        for u, v, data in G.edges(data=True):
+            if 'length' not in data or data['length'] is None:
+                # Fallback to geometric distance if length missing
+                pos_u = (G.nodes[u].get('x', 0), G.nodes[u].get('y', 0))
+                pos_v = (G.nodes[v].get('x', 0), G.nodes[v].get('y', 0))
+                data['length'] = ((pos_u[0] - pos_v[0])**2 + (pos_u[1] - pos_v[1])**2)**0.5
+        
+        # Step 3: Work with largest connected component if graph is disconnected
+        original_graph = G
+        if not nx.is_connected(G):
+            components = list(nx.connected_components(G))
+            largest_component = max(components, key=len)
+            G = G.subgraph(largest_component).copy()
+            logger.info(f"Working with largest component: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
+            
+            # Update building nodes to only include those in largest component
+            building_nodes = [n for n in building_nodes if n in largest_component]
+            logger.info(f"Buildings in largest component: {len(building_nodes)}")
+        
+        # Step 4: Approximate Steiner tree using shortest paths
+        steiner_graph = nx.Graph()
+        
+        # Add all nodes from the working graph
+        for node, data in G.nodes(data=True):
+            steiner_graph.add_node(node, **data)
+        
+        logger.info(f"Added {steiner_graph.number_of_nodes()} nodes to Steiner tree graph")
+        
+        # Step 5: Build distance matrix between all building pairs
+        building_distances = {}
+        building_paths = {}
+        total_pairs = len(building_nodes) * (len(building_nodes) - 1) // 2
+        successful_paths = 0
+        failed_paths = 0
+        
+        logger.info(f"Calculating shortest paths between {total_pairs} building pairs for Steiner tree")
+        
+        for i, source in enumerate(building_nodes):
+            for target in building_nodes[i+1:]:
+                try:
+                    path = nx.shortest_path(G, source=source, target=target, weight='length')
+                    distance = nx.shortest_path_length(G, source=source, target=target, weight='length')
+                    
+                    building_distances[(source, target)] = distance
+                    building_paths[(source, target)] = path
+                    successful_paths += 1
+                    
+                except nx.NetworkXNoPath:
+                    failed_paths += 1
+                    logger.debug(f"No path found between buildings {source} and {target}")
+                    continue
+        
+        logger.info(f"Distance calculation complete: {successful_paths} successful, {failed_paths} failed")
+        
+        # Step 6: Use MST heuristic for Steiner tree approximation
+        # Create complete graph of buildings with shortest path distances
+        building_complete_graph = nx.Graph()
+        building_complete_graph.add_nodes_from(building_nodes)
+        
+        for (source, target), distance in building_distances.items():
+            building_complete_graph.add_edge(source, target, weight=distance)
+        
+        # Find MST of building complete graph
+        if building_complete_graph.number_of_edges() > 0:
+            mst_edges = list(nx.minimum_spanning_tree(building_complete_graph, weight='weight').edges())
+            logger.info(f"Building MST has {len(mst_edges)} edges connecting {len(building_nodes)} buildings")
+        else:
+            mst_edges = []
+            logger.warning("No edges in building complete graph - cannot construct Steiner tree")
+        
+        # Step 7: Add shortest paths for each MST edge to Steiner tree
+        edges_added = 0
+        steiner_nodes_used = set()
+        
+        for source, target in mst_edges:
+            path_key = (source, target) if (source, target) in building_paths else (target, source)
+            if path_key in building_paths:
+                path = building_paths[path_key]
+                
+                # Add all edges in the shortest path
+                for j in range(len(path) - 1):
+                    u, v = path[j], path[j+1]
+                    if not steiner_graph.has_edge(u, v):
+                        edge_data = G[u][v]
+                        steiner_graph.add_edge(u, v, **edge_data)
+                        edges_added += 1
+                
+                # Track Steiner nodes (intermediate nodes)
+                for node in path:
+                    steiner_nodes_used.add(node)
+        
+        logger.info(f"Added {edges_added} edges from {len(mst_edges)} shortest paths")
+        logger.info(f"Steiner tree uses {len(steiner_nodes_used)} total nodes ({len(building_nodes)} buildings + {len(steiner_nodes_used) - len(building_nodes)} Steiner nodes)")
+        
+        # Step 8: Remove unused nodes (nodes not part of any shortest path)
+        nodes_before_cleanup = steiner_graph.number_of_nodes()
+        unused_nodes = [node for node in steiner_graph.nodes() 
+                       if node not in steiner_nodes_used]
+        steiner_graph.remove_nodes_from(unused_nodes)
+        nodes_after_cleanup = steiner_graph.number_of_nodes()
+        
+        logger.info(f"Node cleanup: {nodes_before_cleanup} -> {nodes_after_cleanup} nodes ({len(unused_nodes)} unused nodes removed)")
+        
+        # Step 9: Remove non-building end nodes iteratively
+        nodes_before_end_cleanup = steiner_graph.number_of_nodes()
+        removed_end_nodes = self._remove_non_building_end_nodes(steiner_graph)
+        nodes_after_end_cleanup = steiner_graph.number_of_nodes()
+        
+        logger.info(f"End node cleanup: {nodes_before_end_cleanup} -> {nodes_after_end_cleanup} nodes ({removed_end_nodes} non-building end nodes removed)")
+        
+        # Step 10: Calculate comprehensive statistics
+        original_length = sum(data.get('length', 0) for _, _, data in original_graph.edges(data=True))
+        steiner_length = sum(data.get('length', 0) for _, _, data in steiner_graph.edges(data=True))
+        connected_buildings_final = len([n for n in building_nodes if steiner_graph.has_node(n)])
+        
+        # Calculate Steiner tree efficiency metrics
+        steiner_nodes_count = len([n for n in steiner_graph.nodes() 
+                                 if steiner_graph.nodes[n].get('node_type') != 'building'])
+        
+        logger.info(f"Final Steiner tree statistics:")
+        logger.info(f"  - Total length: {steiner_length:.2f}")
+        logger.info(f"  - Connected buildings: {connected_buildings_final}/{len(building_nodes)}")
+        logger.info(f"  - Steiner nodes: {steiner_nodes_count}")
+        logger.info(f"  - Tree connectivity: {nx.is_connected(steiner_graph) if steiner_graph.number_of_nodes() > 0 else False}")
+        
+        stats = {
+            "algorithm": "steiner_tree",
+            "original_nodes": original_graph.number_of_nodes(),
+            "original_edges": original_graph.number_of_edges(),
+            "steiner_nodes": steiner_graph.number_of_nodes(),
+            "steiner_edges": steiner_graph.number_of_edges(),
+            "total_buildings": len(building_nodes),
+            "connected_buildings": connected_buildings_final,
+            "steiner_nodes_count": steiner_nodes_count,
+            "building_pairs_calculated": total_pairs,
+            "successful_paths": successful_paths,
+            "failed_paths": failed_paths,
+            "mst_edges_used": len(mst_edges),
+            "edges_added_from_paths": edges_added,
+            "unused_nodes_removed": len(unused_nodes),
+            "removed_end_nodes": removed_end_nodes,
+            "total_length": steiner_length,
+            "original_total_length": original_length,
+            "length_reduction": original_length - steiner_length,
+            "reduction_percentage": ((original_length - steiner_length) / original_length * 100) if original_length > 0 else 0,
+            "node_reduction_percentage": ((original_graph.number_of_nodes() - steiner_graph.number_of_nodes()) / original_graph.number_of_nodes() * 100) if original_graph.number_of_nodes() > 0 else 0,
+            "edge_reduction_percentage": ((original_graph.number_of_edges() - steiner_graph.number_of_edges()) / original_graph.number_of_edges() * 100) if original_graph.number_of_edges() > 0 else 0
+        }
+        
+        return steiner_graph, stats
+    
+    def _remove_non_building_end_nodes(self, G: nx.Graph) -> int:
+        """
+        Remove end nodes (degree = 1) that are not buildings.
+        Continues iteratively until no more non-building end nodes exist.
+        
+        Args:
+            G: Graph to modify in-place
+            
+        Returns:
+            Number of nodes removed
+        """
+        removed_count = 0
+        
+        while True:
+            # Find end nodes that are not buildings
+            end_nodes_to_remove = []
+            
+            for node in G.nodes():
+                if G.degree(node) == 1:  # End node (degree = 1)
+                    node_type = G.nodes[node].get('node_type', 'unknown')
+                    if node_type != 'building':
+                        end_nodes_to_remove.append(node)
+            
+            # If no more end nodes to remove, we're done
+            if not end_nodes_to_remove:
+                break
+            
+            # Remove the end nodes
+            G.remove_nodes_from(end_nodes_to_remove)
+            removed_count += len(end_nodes_to_remove)
+            
+            logger.info(f"Removed {len(end_nodes_to_remove)} non-building end nodes")
+        
+        logger.info(f"Total non-building end nodes removed: {removed_count}")
+        return removed_count
 
 
 class GraphFilter:
@@ -304,7 +532,8 @@ class GraphFilter:
         """Register available pruning algorithms."""
         return {
             "minimum_spanning_tree": MinimumSpanningTreePruner(),
-            "all_building_connections": AllBuildingConnectionsPruner()
+            "all_building_connections": AllBuildingConnectionsPruner(),
+            "steiner_tree": SteinerTreePruner()
         }
     
     def filter_and_optimize_graph(self, 

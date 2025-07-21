@@ -68,8 +68,9 @@ class Config:
             "max_building_connection_distance": 20.0,
             "default_pruning_algorithm": "minimum_spanning_tree",
             "pruning_algorithms": {
-                "minimum_spanning_tree": {"preserve_critical_nodes": True},
-                "all_building_connections": {}
+                "minimum_spanning_tree": {},
+                "all_building_connections": {},
+                "steiner_tree": {}
             }
         }
     }

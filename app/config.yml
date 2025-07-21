@@ -76,6 +76,8 @@ graph_filters:
       
     all_building_connections:
       # No specific parameters needed
+    steiner_tree:
+      # No specific parameters needed
       
 
       
