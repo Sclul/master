@@ -169,29 +169,73 @@ class AllBuildingConnectionsPruner(PruningAlgorithm):
     
     def prune(self, G: nx.Graph, **kwargs) -> Tuple[nx.Graph, Dict[str, Any]]:
         """Optimize network by keeping only shortest paths between buildings."""
+        
         if G.number_of_nodes() == 0:
             return G, {"message": "Empty graph"}
         
-        # Find all building nodes
+        # Step 1: Identify building nodes
         building_nodes = [node for node, data in G.nodes(data=True) 
                          if data.get('node_type') == 'building']
         
         if len(building_nodes) < 2:
             return G, {"message": "Need at least 2 buildings for optimization"}
         
-        # Create new graph with shortest paths between all building pairs
+        # DEBUG: Check building connectivity
+        logger.info(f"Total buildings found: {len(building_nodes)}")
+        
+        # Check if buildings are connected to the network
+        connected_buildings = []
+        isolated_buildings = []
+        for building in building_nodes:
+            if G.degree(building) > 0:
+                connected_buildings.append(building)
+            else:
+                isolated_buildings.append(building)
+        
+        logger.info(f"Connected buildings: {len(connected_buildings)}")
+        logger.info(f"Isolated buildings: {len(isolated_buildings)}")
+        
+        # Check connected components before optimization
+        if not nx.is_connected(G):
+            components = list(nx.connected_components(G))
+            logger.info(f"Graph has {len(components)} connected components")
+            
+            # Log component sizes and building counts
+            for i, component in enumerate(components):
+                buildings_in_component = [n for n in component if G.nodes[n].get('node_type') == 'building']
+                logger.info(f"Component {i}: {len(component)} nodes, {len(buildings_in_component)} buildings")
+        
+        # Step 2: Ensure all edges have weights (use 'length' attribute)
+        for u, v, data in G.edges(data=True):
+            if 'length' not in data or data['length'] is None:
+                # Fallback to geometric distance if length missing
+                pos_u = (G.nodes[u].get('x', 0), G.nodes[u].get('y', 0))
+                pos_v = (G.nodes[v].get('x', 0), G.nodes[v].get('y', 0))
+                data['length'] = ((pos_u[0] - pos_v[0])**2 + (pos_u[1] - pos_v[1])**2)**0.5
+        
+        # Step 3: Create new graph with shortest paths between all building pairs
         optimized_graph = nx.Graph()
         
         # Add all nodes first
         for node, data in G.nodes(data=True):
             optimized_graph.add_node(node, **data)
         
-        # Add shortest paths between all building pairs
+        logger.info(f"Added {optimized_graph.number_of_nodes()} nodes to optimized graph")
+        
+        # Step 4: Add shortest paths between all building pairs
         edges_added = 0
+        total_building_pairs = len(building_nodes) * (len(building_nodes) - 1) // 2
+        successful_paths = 0
+        failed_paths = 0
+        
+        logger.info(f"Calculating shortest paths for {total_building_pairs} building pairs")
+        
         for i, source in enumerate(building_nodes):
             for target in building_nodes[i+1:]:
                 try:
                     path = nx.shortest_path(G, source=source, target=target, weight='length')
+                    successful_paths += 1
+                    
                     # Add all edges in the path
                     for j in range(len(path) - 1):
                         u, v = path[j], path[j+1]
@@ -200,20 +244,43 @@ class AllBuildingConnectionsPruner(PruningAlgorithm):
                             optimized_graph.add_edge(u, v, **edge_data)
                             edges_added += 1
                 except nx.NetworkXNoPath:
+                    failed_paths += 1
                     continue
         
-        # Remove isolated nodes
+        logger.info(f"Path calculation complete: {successful_paths} successful, {failed_paths} failed")
+        logger.info(f"Added {edges_added} edges from shortest paths")
+        
+        # Step 5: Remove isolated nodes
+        nodes_before_cleanup = optimized_graph.number_of_nodes()
         isolated_nodes = [node for node in optimized_graph.nodes() 
                          if optimized_graph.degree(node) == 0]
         optimized_graph.remove_nodes_from(isolated_nodes)
+        nodes_after_cleanup = optimized_graph.number_of_nodes()
+        
+        logger.info(f"Isolated node cleanup: {nodes_before_cleanup} -> {nodes_after_cleanup} nodes ({len(isolated_nodes)} isolated nodes removed)")
+        
+        # Step 6: Calculate statistics
+        original_length = sum(data.get('length', 0) for _, _, data in G.edges(data=True))
+        total_length = sum(data.get('length', 0) for _, _, data in optimized_graph.edges(data=True))
+        connected_buildings_final = len([n for n in building_nodes if optimized_graph.has_node(n)])
         
         stats = {
             "algorithm": "all_building_connections",
+            "original_nodes": G.number_of_nodes(),
             "original_edges": G.number_of_edges(),
-            "remaining_edges": optimized_graph.number_of_edges(),
-            "removed_edges": G.number_of_edges() - optimized_graph.number_of_edges(),
-            "building_nodes_connected": len(building_nodes),
-            "isolated_nodes_removed": len(isolated_nodes)
+            "optimized_nodes": optimized_graph.number_of_nodes(),
+            "optimized_edges": optimized_graph.number_of_edges(),
+            "total_buildings": len(building_nodes),
+            "connected_buildings": connected_buildings_final,
+            "building_pairs_calculated": total_building_pairs,
+            "successful_paths": successful_paths,
+            "failed_paths": failed_paths,
+            "edges_added": edges_added,
+            "isolated_nodes_removed": len(isolated_nodes),
+            "total_length": total_length,
+            "original_total_length": original_length,
+            "length_reduction": original_length - total_length,
+            "reduction_percentage": ((original_length - total_length) / original_length * 100) if original_length > 0 else 0
         }
         
         return optimized_graph, stats
