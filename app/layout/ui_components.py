@@ -25,6 +25,26 @@ def create_control_panel(config=None):
             html.Div(id="measurement-status")
         ], className="control-group"),
         
+        # Heat source placement (UI only)
+        html.Section([
+            html.H4("Heat Sources"),
+            html.Button("Add Heat Source", id="add-heat-source-btn", className="btn-secondary"),
+            html.Button("Clear Heat Sources", id="clear-heat-sources-btn", className="btn-secondary"),
+            html.Div([
+                html.Label("Annual Heat Production (kW/year):"),
+                dcc.Input(
+                    id="heat-source-production-input",
+                    type="number",
+                    placeholder="e.g., 1000",
+                    value=1000,
+                    min=0,
+                    className="input-small"
+                )
+            ], className="input-group"),
+            html.Div(id="heat-source-status"),
+            html.Div(id="heat-source-summary")
+        ], className="control-group"),
+        
         # Network generation
         html.Section([
             html.H4("District Heating Network"),

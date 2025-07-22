@@ -9,6 +9,7 @@ from dash import html # type: ignore
 
 from .base_callback import BaseCallback
 from network_constructor import NetworkConstructor
+from heat_source_handler import HeatSourceHandler
 
 logger = logging.getLogger(__name__)
 
@@ -20,15 +21,16 @@ class MapCallbacks(BaseCallback):
         """Initialize with Dash app and configuration."""
         super().__init__(app, config)
         self.network_constructor = NetworkConstructor(config)
+        self.heat_source_handler = HeatSourceHandler(config)
     
     def _register_callbacks(self):
         """Register map-related callbacks."""
         
         @self.app.callback(
             [Output("data-layers", "children"), Output("network-status", "children", allow_duplicate=True)],
-            [Input("layer-toggles", "value"), Input("network-data", "data"), Input("filtered-buildings", "data")],
+            [Input("layer-toggles", "value"), Input("network-data", "data"), Input("filtered-buildings", "data"), Input("heat-sources-data", "data")],
         )
-        def update_map_layers(selected_layers, network_data, filtered_buildings_data):
+        def update_map_layers(selected_layers, network_data, filtered_buildings_data, heat_sources_data):
             """Update map layers based on toggle states."""
             if selected_layers is None:
                 selected_layers = []
@@ -38,6 +40,7 @@ class MapCallbacks(BaseCallback):
             show_filtered = "filtered" in selected_layers
             show_network = "network" in selected_layers
             show_filtered_network = "filtered_network" in selected_layers
+            show_heat_sources = "heat_sources" in selected_layers
             
             logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}, network={show_network}, filtered_network={show_filtered_network}")
             
@@ -73,7 +76,7 @@ class MapCallbacks(BaseCallback):
                             className="error-message"
                         )
             
-            layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network, show_filtered_network)
+            layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network, show_filtered_network, show_heat_sources)
             return layers, network_status
 
         @self.app.callback(
@@ -157,7 +160,7 @@ class MapCallbacks(BaseCallback):
             """Display current zoom level."""
             return f"Zoom: {zoom}" if zoom else "Zoom: Unknown"
     
-    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False, show_filtered_network=False):
+    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False, show_filtered_network=False, show_heat_sources=False):
         """Build only the data layers (not base map components)."""
         layers = []
         
@@ -190,6 +193,12 @@ class MapCallbacks(BaseCallback):
             if filtered_network_layer is not None:
                 layers.append(filtered_network_layer)
                 logger.info("Added filtered heating network layer to map")
+        
+        if show_heat_sources:
+            heat_sources_layer = self._create_heat_sources_layer()
+            if heat_sources_layer is not None:
+                layers.append(heat_sources_layer)
+                logger.info("Added heat sources layer to map")
         
         logger.info(f"Total data layers built: {len(layers)}")
         return layers
@@ -263,6 +272,16 @@ class MapCallbacks(BaseCallback):
             filtered_network_path,
             "filtered-heating-network-layer",
             {"color": "red", "weight": 3, "opacity": 0.9}  # Different style for optimized network
+        )
+    
+    def _create_heat_sources_layer(self):
+        """Create heat sources layer from saved data."""
+        heat_sources_path = self.data_paths.get("heat_sources_path", "./data/heat_sources.geojson")
+        
+        return self._create_layer_from_file(
+            heat_sources_path,
+            "heat-sources-layer",
+            {"color": "orange", "fillColor": "orange", "radius": 8, "weight": 2, "fillOpacity": 0.8}
         )
     
     def _ensure_network_geojson_exists(self):

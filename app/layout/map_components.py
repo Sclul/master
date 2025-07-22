@@ -15,6 +15,13 @@ def get_event_handlers():
             }
             """
         ),
+        click=assign(
+            """
+            function(e, ctx) {
+                ctx.setProps({click_lat_lng: [e.latlng.lat, e.latlng.lng]});
+            }
+            """
+        ),
     )
 
 
@@ -62,6 +69,7 @@ def create_map_component(config=None):
                     {"label": "Filtered", "value": "filtered"},
                     {"label": "Network", "value": "network"},
                     {"label": "Filtered Network", "value": "filtered_network"},
+                    {"label": "Heat Sources", "value": "heat_sources"},
                 ],
                 value=[],
                 className="map-layer-controls"

@@ -27,6 +27,7 @@ data_paths:
   network_graphml_path: "./data/heating_network.graphml"
   filtered_network_graphml_path: "./data/filtered_heating_network.graphml"
   filtered_network_path: "./data/filtered_heating_network.geojson"
+  heat_sources_path: "./data/heat_sources.geojson"
 
 # Heat demand configuration
 heat_demand:
@@ -64,7 +65,6 @@ building_filters:
 # Building clustering configuration
 building_clustering:
   auto_apply: true   # Automatically apply clustering when processing buildings
-
 
 # Graph filtering and optimization settings
 graph_filters:
