@@ -153,6 +153,27 @@ class MapCallbacks(BaseCallback):
             return no_update
 
         @self.app.callback(
+            Output("layer-toggles", "value", allow_duplicate=True),
+            Input("heat-sources-data", "data"),
+            State("layer-toggles", "value"),
+            prevent_initial_call=True
+        )
+        def auto_enable_heat_sources_layer(heat_sources_data, current_selected_layers):
+            """Auto-enable heat sources layer when a heat source is added."""
+            if not heat_sources_data or not isinstance(heat_sources_data, dict):
+                return no_update
+            
+            # Auto-enable when a heat source is added (indicated by "updated" or "timestamp")
+            if heat_sources_data.get("updated") or heat_sources_data.get("timestamp"):
+                updated_layers = (current_selected_layers or []).copy()
+                if "heat_sources" not in updated_layers:
+                    updated_layers.append("heat_sources")
+                    logger.info("Auto-enabling heat sources layer after heat source creation")
+                    return updated_layers
+            
+            return no_update
+
+        @self.app.callback(
             Output("map-zoom-info", "children"),
             Input("map", "zoom")
         )
@@ -277,6 +298,30 @@ class MapCallbacks(BaseCallback):
     def _create_heat_sources_layer(self):
         """Create heat sources layer from saved data."""
         heat_sources_path = self.data_paths.get("heat_sources_path", "./data/heat_sources.geojson")
+        
+        # Check if file exists and has valid content
+        try:
+            if not Path(heat_sources_path).exists():
+                logger.debug(f"Heat sources file does not exist: {heat_sources_path}")
+                return None
+            
+            # Check if file has content
+            file_size = Path(heat_sources_path).stat().st_size
+            if file_size == 0:
+                logger.debug(f"Heat sources file is empty: {heat_sources_path}")
+                return None
+            
+            # Try to read and check if it has features
+            gdf = gpd.read_file(heat_sources_path)
+            if gdf.empty:
+                logger.debug(f"Heat sources file has no features: {heat_sources_path}")
+                return None
+            
+            logger.info(f"Creating heat sources layer with {len(gdf)} heat sources")
+            
+        except Exception as e:
+            logger.debug(f"Cannot read heat sources file: {heat_sources_path}, error: {e}")
+            return None
         
         return self._create_layer_from_file(
             heat_sources_path,

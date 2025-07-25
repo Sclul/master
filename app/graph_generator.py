@@ -7,6 +7,7 @@ import geopandas as gpd  # type: ignore
 import networkx as nx  # type: ignore
 from shapely.geometry import LineString, Point  # type: ignore
 import json
+from heat_source_handler import HeatSourceHandler
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class GraphGenerator:
         """Initialize with configuration."""
         self.config = config
         self.data_paths = config.data_paths
+        self.heat_source_handler = HeatSourceHandler(config)
         
         logger.info("GraphGenerator initialized")
     
@@ -78,6 +80,16 @@ class GraphGenerator:
                     edge_count += net_new_edges
                 else:
                     logger.warning(f"Buildings file {buildings_path} is empty, skipping building connections.")
+
+            # Connect heat sources to the network
+            heat_sources_gdf = self.heat_source_handler.load_heat_sources()
+            if heat_sources_gdf is not None and not heat_sources_gdf.empty:
+                logger.info(f"Connecting {len(heat_sources_gdf)} heat sources to network")
+                G, hs_new_nodes, hs_net_new_edges = self._connect_heat_sources_with_bisection(G, heat_sources_gdf)
+                node_count += hs_new_nodes
+                edge_count += hs_net_new_edges
+            else:
+                logger.info("No heat sources found, skipping heat source connections.")
 
             # Clean up None values before writing to GraphML
             self._clean_graph_for_graphml(G)
@@ -339,6 +351,150 @@ class GraphGenerator:
             for i, component in enumerate(components):
                 buildings_in_component = [n for n in component if n in building_nodes]
                 logger.info(f"  Component {i}: {len(component)} nodes, {len(buildings_in_component)} buildings")
+
+        return G, new_nodes_added, net_edges_added
+
+    def _connect_heat_sources_with_bisection(self, G: nx.Graph, heat_sources_gdf: gpd.GeoDataFrame) -> Tuple[nx.Graph, int, int]:
+        """
+        Connects heat sources to the nearest street segment using true bisection method.
+        Each heat source connection splits the nearest street segment into two new segments.
+        Heat sources are treated like buildings but with different node attributes.
+        """
+        new_nodes_added = 0
+        net_edges_added = 0
+        
+        next_node_id = max(G.nodes) + 1 if G.nodes else 0
+        successful_connections = 0
+        failed_connections = 0
+
+        for idx, heat_source in heat_sources_gdf.iterrows():
+            logger.info(f"Processing heat source {idx}")
+            
+            # Get heat source point from geometry
+            heat_source_point = heat_source.geometry
+            if not isinstance(heat_source_point, Point):
+                # If geometry is not a Point, try to get centroid
+                heat_source_point = heat_source.geometry.centroid
+                logger.info(f"Heat source {idx}: Using centroid {heat_source_point.x}, {heat_source_point.y}")
+            else:
+                logger.info(f"Heat source {idx}: Using point {heat_source_point.x}, {heat_source_point.y}")
+            
+            # Get current street edges (this updates as we add new segments)
+            street_edges = [(u, v, data) for u, v, data in G.edges(data=True) if data.get('edge_type') == 'street_segment']
+            
+            if not street_edges:
+                logger.warning(f"Heat source {idx}: No street segments found in current graph")
+                failed_connections += 1
+                continue
+            
+            # Create geometries for current street edges
+            edge_lines = []
+            edge_info = []
+            for u, v, data in street_edges:
+                line = LineString([Point(G.nodes[u]['x'], G.nodes[u]['y']), Point(G.nodes[v]['x'], G.nodes[v]['y'])])
+                edge_lines.append(line)
+                edge_info.append((u, v, data))
+            
+            edges_gs = gpd.GeoSeries(edge_lines)
+            
+            # Find the nearest street segment to this heat source
+            distances = edges_gs.distance(heat_source_point)
+            nearest_edge_idx = distances.idxmin()
+            min_distance = distances.iloc[nearest_edge_idx]
+            
+            logger.info(f"Heat source {idx}: Nearest edge distance = {min_distance:.2f}m")
+            
+            u, v, edge_data = edge_info[nearest_edge_idx]
+            closest_edge_line = edge_lines[nearest_edge_idx]
+            
+            # Step 1: Identify the closest segment (B-C in the example)
+            logger.info(f"Heat source {idx}: Connecting to segment {u}-{v}")
+            
+            # Step 2: Create a new connection point (Z in the example)
+            new_point_on_line = closest_edge_line.interpolate(closest_edge_line.project(heat_source_point))
+            
+            z_node_id = next_node_id
+            G.add_node(z_node_id, 
+                      x=new_point_on_line.x, 
+                      y=new_point_on_line.y, 
+                      node_type='street_connection', 
+                      street_id=edge_data.get('street_id', 'unknown'))
+            next_node_id += 1
+            new_nodes_added += 1
+            
+            # Step 3: Restructure the network - Remove original segment B-C
+            if not G.has_edge(u, v):
+                logger.warning(f"Heat source {idx}: Edge {u}-{v} not found in graph")
+                failed_connections += 1
+                continue
+            
+            # Remove the original edge B-C
+            G.remove_edge(u, v)
+            
+            # Step 4: Split into two segments: B-Z and Z-C
+            dist_u_z = Point(G.nodes[u]['x'], G.nodes[u]['y']).distance(new_point_on_line)
+            dist_z_v = new_point_on_line.distance(Point(G.nodes[v]['x'], G.nodes[v]['y']))
+            
+            # Create copies of edge_data without the length key to avoid conflicts
+            edge_data_copy = {k: v for k, v in edge_data.items() if k != 'length'}
+            
+            # Add new segments B-Z and Z-C
+            G.add_edge(u, z_node_id, length=dist_u_z, **edge_data_copy)
+            G.add_edge(z_node_id, v, length=dist_z_v, **edge_data_copy)
+            
+            # Net change: -1 original edge + 2 new edges = +1 edge
+            net_edges_added += 1
+            
+            logger.info(f"Heat source {idx}: Split edge {u}-{v} into {u}-{z_node_id} and {z_node_id}-{v}")
+            
+            # Step 5: Connect the heat source to the new node Z
+            heat_source_node_id = next_node_id
+            
+            # Get heat source properties
+            heat_source_id = heat_source.get('id', f'hs_unknown_{idx}')
+            annual_heat_production = heat_source.get('annual_heat_production', 0.0)
+            heat_source_type = heat_source.get('heat_source_type', 'Generic')
+            
+            # Ensure numeric values
+            try:
+                annual_heat_production = float(annual_heat_production) if annual_heat_production is not None else 0.0
+            except (ValueError, TypeError):
+                annual_heat_production = 0.0
+            
+            G.add_node(heat_source_node_id, 
+                      x=heat_source_point.x, 
+                      y=heat_source_point.y, 
+                      node_type='heat_source', 
+                      heat_source_id=heat_source_id,
+                      annual_heat_production=annual_heat_production,
+                      heat_source_type=heat_source_type)
+            next_node_id += 1
+            new_nodes_added += 1
+            
+            # Connect heat source to the connection point Z
+            dist_heat_source_z = heat_source_point.distance(new_point_on_line)
+            G.add_edge(heat_source_node_id, z_node_id, edge_type='heat_source_connection', length=dist_heat_source_z)
+            net_edges_added += 1
+            
+            logger.info(f"Heat source {idx}: Connected heat source {heat_source_node_id} to connection point {z_node_id}")
+            successful_connections += 1
+
+        logger.info(f"Heat source connections complete:")
+        logger.info(f"  - Successful connections: {successful_connections}")
+        logger.info(f"  - Failed connections: {failed_connections}")
+        logger.info(f"  - Total heat sources processed: {len(heat_sources_gdf)}")
+        logger.info(f"  - Nodes added: {new_nodes_added}")
+        logger.info(f"  - Net edges added: {net_edges_added}")
+        
+        # Verify connectivity after heat source connections
+        if G.number_of_nodes() > 0:
+            components = list(nx.connected_components(G))
+            logger.info(f"After heat source connections: {len(components)} connected components")
+            
+            heat_source_nodes = [n for n, data in G.nodes(data=True) if data.get('node_type') == 'heat_source']
+            for i, component in enumerate(components):
+                heat_sources_in_component = [n for n in component if n in heat_source_nodes]
+                logger.info(f"  Component {i}: {len(component)} nodes, {len(heat_sources_in_component)} heat sources")
 
         return G, new_nodes_added, net_edges_added
 

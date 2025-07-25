@@ -47,8 +47,7 @@ class HeatSourceHandler:
         target_crs = self.config.coordinate_system.get("target_crs", "EPSG:5243")
         return gpd.GeoDataFrame(
             columns=[
-                'id', 'annual_heat_production', 'heat_source_type', 
-                'latitude', 'longitude'
+                'id', 'annual_heat_production', 'heat_source_type'
             ],
             geometry=gpd.GeoSeries(name='geometry', dtype='geometry'),
             crs=target_crs
@@ -80,8 +79,6 @@ class HeatSourceHandler:
                 'id': heat_source_id,
                 'annual_heat_production': float(annual_heat_production),
                 'heat_source_type': str(heat_source_type),
-                'latitude': float(latitude),
-                'longitude': float(longitude),
                 'geometry': Point(longitude, latitude)
             }
             

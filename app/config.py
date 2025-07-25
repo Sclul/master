@@ -32,7 +32,7 @@ class Config:
             "network_graphml_path": "../data/heating_network.graphml",
             "filtered_network_graphml_path": "../data/filtered_heating_network.graphml",
             "filtered_network_path": "../data/filtered_heating_network.geojson",
-            "heat_sources_path": "../data/heat_sources.geojson",
+            "heat_sources_path": "./data/heat_sources.geojson",
         },
         "heat_demand": {
             "gdb_path": "/gdb/GDB.gdb",

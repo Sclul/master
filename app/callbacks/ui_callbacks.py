@@ -4,12 +4,18 @@ from dash_extensions.enrich import Input, Output, no_update, clientside_callback
 from dash import html, dcc # type: ignore
 
 from .base_callback import BaseCallback
+from geospatial_handler import GeospatialHandler
 
 logger = logging.getLogger(__name__)
 
 
 class UICallbacks(BaseCallback):
     """Handles callbacks related to UI updates and displays."""
+    
+    def __init__(self, app, config):
+        """Initialize with Dash app and configuration."""
+        super().__init__(app, config)
+        self.geospatial_handler = GeospatialHandler(config)
     
     def _register_callbacks(self):
         """Register UI-related callbacks."""
@@ -47,6 +53,7 @@ class UICallbacks(BaseCallback):
                 Output("buildings-processed", "data", allow_duplicate=True),
                 Output("filtered-buildings", "data", allow_duplicate=True),
                 Output("network-data", "data", allow_duplicate=True),
+                Output("heat-sources-data", "data", allow_duplicate=True),
                 Output("filter-status", "children", allow_duplicate=True)
             ],
             Input("start-measurement-btn", "n_clicks"),
@@ -55,6 +62,13 @@ class UICallbacks(BaseCallback):
         def handle_measurement_button(n_clicks):
             """Handle measurement button click and clear previous data."""
             logger.info("Area Selection started - clearing previous data and layers")
+            
+            # Clear all files in the data directory (including heat_sources.geojson)
+            try:
+                clear_result = self.geospatial_handler.clear_data_directory()
+                logger.info(f"Data directory clearing result: {clear_result}")
+            except Exception as e:
+                logger.error(f"Error clearing data directory: {e}")
             
             # Clear data summary
             empty_summary = "No data available"
@@ -68,7 +82,7 @@ class UICallbacks(BaseCallback):
             # Clear filter status
             empty_filter_status = ""
             
-            return ("", empty_summary, empty_layers, empty_data, empty_data, empty_data, empty_data, empty_data, empty_filter_status)
+            return ("", empty_summary, empty_layers, empty_data, empty_data, empty_data, empty_data, empty_data, empty_data, empty_filter_status)
 
         # Add clientside callback to trigger the JavaScript function
         clientside_callback(
