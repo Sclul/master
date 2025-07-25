@@ -5,7 +5,7 @@ from pathlib import Path
 from abc import ABC, abstractmethod
 import networkx as nx # type: ignore
 import geopandas as gpd # type: ignore
-from shapely.geometry import Point # type: ignore
+from shapely.geometry import Point, LineString # type: ignore
 import numpy as np # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -29,17 +29,20 @@ class MinimumSpanningTreePruner(PruningAlgorithm):
     """Prune graph to minimum spanning tree while preserving critical connections."""
     
     def prune(self, G: nx.Graph, preserve_critical_nodes: bool = True, **kwargs) -> Tuple[nx.Graph, Dict[str, Any]]:
-        """Create minimum spanning tree that connects all buildings with minimal infrastructure."""
+        """Create minimum spanning tree that connects all buildings and heat sources with minimal infrastructure."""
         
         if G.number_of_nodes() == 0:
             return G, {"message": "Empty graph"}
         
-        # Step 1: Identify building nodes
+        # Step 1: Identify building and heat source nodes (terminal nodes)
         building_nodes = [n for n, data in G.nodes(data=True) 
                         if data.get('node_type') == 'building']
+        heat_source_nodes = [n for n, data in G.nodes(data=True) 
+                           if data.get('node_type') == 'heat_source']
+        terminal_nodes = building_nodes + heat_source_nodes
         
-        if len(building_nodes) < 2:
-            return G, {"message": f"Need at least 2 buildings, found {len(building_nodes)}"}
+        if len(terminal_nodes) < 2:
+            return G, {"message": f"Need at least 2 terminal nodes (buildings + heat sources), found {len(terminal_nodes)}"}
         
         # DEBUG: Check building connectivity
         logger.info(f"Total buildings found: {len(building_nodes)}")
@@ -574,6 +577,11 @@ class GraphFilter:
             # Get initial statistics
             initial_stats = self._get_graph_statistics(G)
             
+            # Store heat source information before optimization
+            heat_source_nodes = [(node, data) for node, data in G.nodes(data=True) 
+                                if data.get('node_type') == 'heat_source']
+            logger.info(f"Found {len(heat_source_nodes)} heat sources to preserve during optimization")
+            
             # Apply building connection distance filter
             G_filtered, connection_stats = self._filter_building_connections(G, max_building_connection)
             
@@ -595,6 +603,11 @@ class GraphFilter:
             else:
                 logger.info(f"No pruning algorithm specified (got: {pruning_algorithm})")
                 logger.info(f"Available algorithms: {list(self.pruning_algorithms.keys())}")
+            
+            # Reconnect heat sources to optimized network (exempt from distance limits)
+            if heat_source_nodes:
+                G_filtered = self._reconnect_heat_sources_post_optimization(G_filtered, heat_source_nodes)
+                logger.info(f"Reconnected {len(heat_source_nodes)} heat sources to optimized network")
             
             # Clean graph for GraphML compliance
             self._clean_graph_for_graphml(G_filtered)
@@ -630,10 +643,10 @@ class GraphFilter:
             return {"status": "error", "message": str(e)}
     
     def _filter_building_connections(self, G: nx.Graph, max_distance: float) -> Tuple[nx.Graph, Dict[str, Any]]:
-        """Filter building connections by maximum distance but NEVER remove building nodes."""
+        """Filter building connections by maximum distance but NEVER remove building nodes. Heat source connections are exempt from distance limits."""
         G_filtered = G.copy()
         
-        # Find building connections that exceed max distance
+        # Find building connections that exceed max distance (but exempt heat source connections)
         building_connections_to_remove = []
         
         for u, v, data in G_filtered.edges(data=True):
@@ -641,11 +654,12 @@ class GraphFilter:
                 edge_length = data.get('length', 0)
                 if edge_length > max_distance:
                     building_connections_to_remove.append((u, v))
+            # Note: heat_source_connection edges are exempt from distance limits
         
         # Remove only the connections, NOT the building nodes
         G_filtered.remove_edges_from(building_connections_to_remove)
         
-        # Remove any orphaned street_connection nodes (but never building nodes)
+        # Remove any orphaned street_connection nodes (but never building or heat source nodes)
         orphaned_nodes = []
         for node in G_filtered.nodes():
             node_type = G_filtered.nodes[node].get('node_type', '')
@@ -657,14 +671,130 @@ class GraphFilter:
         stats = {
             "removed_connections": len(building_connections_to_remove),
             "removed_building_nodes": 0,  # Never remove building nodes
+            "removed_heat_source_nodes": 0,  # Never remove heat source nodes
             "removed_orphaned_nodes": len(orphaned_nodes),
             "max_distance_threshold": max_distance
         }
         
         logger.info(f"Removed {len(building_connections_to_remove)} building connections exceeding {max_distance}m")
-        logger.info(f"Removed 0 building nodes (never remove buildings) and {len(orphaned_nodes)} orphaned street nodes")
+        logger.info(f"Heat source connections are exempt from distance limits")
+        logger.info(f"Removed 0 building/heat source nodes and {len(orphaned_nodes)} orphaned street nodes")
         
         return G_filtered, stats
+    
+    def _reconnect_heat_sources_post_optimization(self, G: nx.Graph, heat_source_nodes: List[Tuple]) -> nx.Graph:
+        """
+        Reconnect heat sources to optimized network using bisection method, no distance limits.
+        Heat sources are always connected regardless of distance.
+        
+        Args:
+            G: Optimized graph to modify
+            heat_source_nodes: List of (node_id, node_data) tuples for heat sources
+        
+        Returns:
+            Graph with heat sources reconnected
+        """
+        if not heat_source_nodes:
+            return G
+        
+        logger.info(f"Reconnecting {len(heat_source_nodes)} heat sources to optimized network")
+        
+        # Get next available node ID (ensure it's an integer)
+        if G.nodes:
+            # Filter for numeric node IDs and find the maximum
+            numeric_nodes = [node for node in G.nodes if isinstance(node, (int, float))]
+            if numeric_nodes:
+                next_node_id = int(max(numeric_nodes)) + 1
+            else:
+                # If no numeric nodes, start from a high number to avoid conflicts
+                next_node_id = 100000
+        else:
+            next_node_id = 0
+        successful_connections = 0
+        failed_connections = 0
+        
+        for node_id, node_data in heat_source_nodes:
+            # Skip if heat source is already in the optimized graph
+            if G.has_node(node_id):
+                logger.info(f"Heat source {node_id} already connected to optimized network")
+                successful_connections += 1
+                continue
+            
+            logger.info(f"Reconnecting heat source {node_id}")
+            
+            # Get heat source point from node data
+            heat_source_point = Point(node_data.get('x', 0), node_data.get('y', 0))
+            
+            # Get current street edges from optimized network
+            street_edges = [(u, v, data) for u, v, data in G.edges(data=True) 
+                           if data.get('edge_type') in ['street_segment', 'building_connection']]
+            
+            if not street_edges:
+                logger.warning(f"Heat source {node_id}: No edges found in optimized network")
+                failed_connections += 1
+                continue
+            
+            # Create geometries for current edges
+            edge_lines = []
+            edge_info = []
+            
+            for u, v, data in street_edges:
+                line = LineString([Point(G.nodes[u]['x'], G.nodes[u]['y']), 
+                                 Point(G.nodes[v]['x'], G.nodes[v]['y'])])
+                edge_lines.append(line)
+                edge_info.append((u, v, data))
+            
+            edges_gs = gpd.GeoSeries(edge_lines)
+            
+            # Find the nearest edge to this heat source (no distance limit)
+            distances = edges_gs.distance(heat_source_point)
+            nearest_edge_idx = distances.idxmin()
+            min_distance = distances.iloc[nearest_edge_idx]
+            
+            logger.info(f"Heat source {node_id}: Nearest edge distance = {min_distance:.2f}m (no distance limit)")
+            
+            u, v, edge_data = edge_info[nearest_edge_idx]
+            closest_edge_line = edge_lines[nearest_edge_idx]
+            
+            # Create a new connection point on the nearest edge
+            new_point_on_line = closest_edge_line.interpolate(closest_edge_line.project(heat_source_point))
+            
+            # Create new street connection node
+            z_node_id = next_node_id
+            G.add_node(z_node_id, 
+                      x=new_point_on_line.x, 
+                      y=new_point_on_line.y, 
+                      node_type='street_connection', 
+                      street_id=str(edge_data.get('street_id', 'unknown')))
+            next_node_id += 1
+            
+            # Remove original edge and split into two segments
+            if G.has_edge(u, v):
+                G.remove_edge(u, v)
+                
+                # Calculate distances for new segments
+                dist_u_z = Point(G.nodes[u]['x'], G.nodes[u]['y']).distance(new_point_on_line)
+                dist_z_v = new_point_on_line.distance(Point(G.nodes[v]['x'], G.nodes[v]['y']))
+                
+                # Create copies of edge_data without the length key
+                edge_data_copy = {k: v for k, v in edge_data.items() if k != 'length'}
+                
+                # Add new segments
+                G.add_edge(u, z_node_id, length=dist_u_z, **edge_data_copy)
+                G.add_edge(z_node_id, v, length=dist_z_v, **edge_data_copy)
+            
+            # Add heat source node back to the graph
+            G.add_node(node_id, **node_data)
+            
+            # Connect heat source to the connection point
+            dist_heat_source_z = heat_source_point.distance(new_point_on_line)
+            G.add_edge(node_id, z_node_id, edge_type='heat_source_connection', length=dist_heat_source_z)
+            
+            logger.info(f"Heat source {node_id}: Connected to optimized network via connection point {z_node_id}")
+            successful_connections += 1
+        
+        logger.info(f"Heat source reconnection complete: {successful_connections} successful, {failed_connections} failed")
+        return G
     
     def _get_graph_statistics(self, G: nx.Graph) -> Dict[str, Any]:
         """Get comprehensive statistics about the graph."""
