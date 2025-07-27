@@ -32,6 +32,9 @@ class GraphGenerator:
             Dict with status and file information
         """
         try:
+            # Import here to avoid circular import
+            from utils.progress_tracker import progress_tracker
+            
             # Load streets data
             streets_path = self.data_paths.get("streets_path", "./data/streets.geojson")
             
@@ -57,7 +60,7 @@ class GraphGenerator:
             node_count = G.number_of_nodes()
             edge_count = G.number_of_edges()
             
-            # Connect buildings to the network
+            # Connect buildings to the network - this is where progress tracking happens
             # Check if filtered buildings exist, otherwise use regular buildings
             filtered_buildings_path = self.data_paths.get("filtered_buildings_path", "./data/filtered_buildings.geojson")
             regular_buildings_path = self.data_paths.get("buildings_path", "./data/buildings.geojson")
@@ -93,7 +96,7 @@ class GraphGenerator:
 
             # Clean up None values before writing to GraphML
             self._clean_graph_for_graphml(G)
-
+            
             # Save as GraphML
             output_path = self.data_paths.get("network_graphml_path", "./data/heating_network.graphml")
             output_file = Path(output_path)
@@ -206,15 +209,23 @@ class GraphGenerator:
         Connects buildings to the nearest street segment using true bisection method.
         Each building connection splits the nearest street segment into two new segments.
         """
+        from utils.progress_tracker import progress_tracker
+        
         new_nodes_added = 0
         net_edges_added = 0
         
         next_node_id = max(G.nodes) + 1 if G.nodes else 0
         successful_connections = 0
         failed_connections = 0
+        total_buildings = len(buildings_gdf)
 
         for idx, building in buildings_gdf.iterrows():
             logger.info(f"Processing building {idx}")
+            
+            # Update progress based on building connection percentage
+            total_processed = successful_connections + failed_connections
+            progress_percent = int((total_processed / total_buildings) * 100)
+            progress_tracker.update(progress_percent, f"Connected {successful_connections}/{total_buildings} buildings ({progress_percent}%)")
             
             # Use representative_point coordinates from building properties instead of centroid
             rep_point_data = building.get('representative_point')
@@ -243,6 +254,10 @@ class GraphGenerator:
             if not street_edges:
                 logger.warning(f"Building {idx}: No street segments found in current graph")
                 failed_connections += 1
+                # Update progress even for failed connections
+                total_processed = successful_connections + failed_connections
+                progress_percent = int((total_processed / total_buildings) * 100)
+                progress_tracker.update(progress_percent, f"Connected {successful_connections}/{total_buildings} buildings ({progress_percent}%)")
                 continue
             
             # Create geometries for current street edges
@@ -284,6 +299,10 @@ class GraphGenerator:
             if not G.has_edge(u, v):
                 logger.warning(f"Building {idx}: Edge {u}-{v} not found in graph")
                 failed_connections += 1
+                # Update progress even for failed connections
+                total_processed = successful_connections + failed_connections
+                progress_percent = int((total_processed / total_buildings) * 100)
+                progress_tracker.update(progress_percent, f"Connected {successful_connections}/{total_buildings} buildings ({progress_percent}%)")
                 continue
             
             # Remove the original edge B-C
@@ -334,6 +353,10 @@ class GraphGenerator:
             
             logger.info(f"Building {idx}: Connected building {building_node_id} to connection point {z_node_id}")
             successful_connections += 1
+            
+            # Update progress based on buildings connected (0% to 100% range)
+            progress_percent = int((successful_connections / total_buildings) * 100)
+            progress_tracker.update(progress_percent, f"Connected {successful_connections}/{total_buildings} buildings ({progress_percent}%)")
 
         logger.info(f"Building connections complete:")
         logger.info(f"  - Successful connections: {successful_connections}")

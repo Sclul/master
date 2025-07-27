@@ -559,6 +559,9 @@ class GraphFilter:
             Dictionary with operation results and statistics
         """
         try:
+            # Import here to avoid circular import
+            from utils.progress_tracker import progress_tracker
+            
             # Use defaults from config if not provided
             if graphml_path is None:
                 graphml_path = self.data_paths.get("network_graphml_path", "./data/heating_network.graphml")
@@ -567,12 +570,16 @@ class GraphFilter:
             if max_building_connection is None:
                 max_building_connection = self.filter_settings.get("max_building_connection_distance", 100.0)
             
+            progress_tracker.update(10, "Loading network data...")
+            
             # Load GraphML
             if not Path(graphml_path).exists():
                 return {"status": "error", "message": f"GraphML file not found: {graphml_path}"}
             
             G = nx.read_graphml(graphml_path)
             logger.info(f"Loaded GraphML with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+            
+            progress_tracker.update(20, "Analyzing network structure...")
             
             # Get initial statistics
             initial_stats = self._get_graph_statistics(G)
@@ -582,8 +589,12 @@ class GraphFilter:
                                 if data.get('node_type') == 'heat_source']
             logger.info(f"Found {len(heat_source_nodes)} heat sources to preserve during optimization")
             
+            progress_tracker.update(30, "Filtering building connections...")
+            
             # Apply building connection distance filter
             G_filtered, connection_stats = self._filter_building_connections(G, max_building_connection)
+            
+            progress_tracker.update(50, "Applying optimization algorithm...")
             
             # Apply pruning algorithm if specified
             pruning_stats = {}
@@ -604,13 +615,19 @@ class GraphFilter:
                 logger.info(f"No pruning algorithm specified (got: {pruning_algorithm})")
                 logger.info(f"Available algorithms: {list(self.pruning_algorithms.keys())}")
             
+            progress_tracker.update(70, "Reconnecting heat sources...")
+            
             # Reconnect heat sources to optimized network (exempt from distance limits)
             if heat_source_nodes:
                 G_filtered = self._reconnect_heat_sources_post_optimization(G_filtered, heat_source_nodes)
                 logger.info(f"Reconnected {len(heat_source_nodes)} heat sources to optimized network")
             
+            progress_tracker.update(85, "Finalizing optimized network...")
+            
             # Clean graph for GraphML compliance
             self._clean_graph_for_graphml(G_filtered)
+            
+            progress_tracker.update(95, "Saving optimized network...")
             
             # Save filtered graph
             output_file = Path(output_path)

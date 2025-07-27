@@ -650,6 +650,36 @@ button {
     letter-spacing: 0.05em;
 }
 
+/* ===== PROGRESS BAR ===== */
+#progress-container {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+#progress-container h5 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #2d3748;
+    margin: 0 0 0.5rem 0;
+}
+
+#progress-details {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 0.5rem;
+}
+
+.progress {
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    transition: width 0.3s ease;
+}
+
 .status-section,
 .summary-section {
     margin-bottom: var(--space-6);

@@ -2,6 +2,44 @@
 from dash import dcc, html # type: ignore
 
 
+def create_progress_bar():
+    """Create a progress bar component for long-running operations."""
+    return html.Div(
+        id="progress-container",
+        style={"display": "block"},  # Always visible
+        children=[
+            html.H5("Status", id="progress-title"),
+            html.Div(
+                style={
+                    "width": "100%", 
+                    "height": "20px", 
+                    "background-color": "#e9ecef", 
+                    "border-radius": "4px",
+                    "margin": "10px 0"
+                },
+                children=[
+                    html.Div(
+                        id="progress-bar",
+                        style={
+                            "width": "0%",
+                            "height": "100%",
+                            "background-color": "#007bff",
+                            "border-radius": "4px",
+                            "transition": "width 0.3s ease"
+                        }
+                    )
+                ]
+            ),
+            html.Div(
+                id="progress-details",
+                style={"font-size": "0.9em", "color": "#666"},
+                children=["Ready"]
+            )
+        ],
+        className="mb-3 p-3 border rounded"
+    )
+
+
 def create_control_panel(config=None):
     """Create a clean control panel with essential controls."""
     # Get default values from config
@@ -171,6 +209,9 @@ def create_status_panel():
     """Create a clean status panel."""
     return html.Div([
         html.H3("Status"),
+        
+        # Add progress bar before existing status
+        create_progress_bar(),
         
         html.Section([
             html.H4("Data Summary"),

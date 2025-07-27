@@ -41,11 +41,19 @@ class NetworkCallbacks(BaseCallback):
             try:
                 logger.info("Starting street network generation")
                 
+                # Import here to avoid circular import
+                from utils.progress_tracker import progress_tracker
+                
+                # Start progress tracking
+                progress_tracker.start("Generating street network...")
+                
                 # Generate the street network with nodes for every coordinate
                 result = self.graph_generator.generate_graph()
                 
                 # Update status display
                 if result.get("status") == "success":
+                    progress_tracker.complete(f"Network generated: {result.get('total_nodes', 0)} nodes, {result.get('total_edges', 0)} edges")
+                    
                     status_message = html.Div([
                         html.P(f"✅ {result.get('message')}", className="success-message"),
                         html.P(f"Total nodes: {result.get('total_nodes', 0)}", 
@@ -57,6 +65,7 @@ class NetworkCallbacks(BaseCallback):
                     return status_message, result
                     
                 else:
+                    progress_tracker.error(result.get('message', 'Network generation failed'))
                     error_message = html.Div(
                         f"❌ Street network generation failed: {result.get('message')}", 
                         className="error-message"
@@ -65,6 +74,9 @@ class NetworkCallbacks(BaseCallback):
                     
             except Exception as e:
                 logger.error(f"Error in street network generation callback: {e}")
+                # Import here to avoid circular import
+                from utils.progress_tracker import progress_tracker
+                progress_tracker.error(str(e))
                 error_message = html.Div(
                     f"❌ Street network generation error: {str(e)}", 
                     className="error-message"
@@ -95,6 +107,12 @@ class NetworkCallbacks(BaseCallback):
                 return no_update, no_update
             
             try:
+                # Import here to avoid circular import
+                from utils.progress_tracker import progress_tracker
+                
+                # Start progress tracking
+                progress_tracker.start("Optimizing network...")
+                
                 # Apply graph filtering and optimization
                 result = self.graph_filter.filter_and_optimize_graph(
                     max_building_connection=max_connection,
@@ -102,6 +120,8 @@ class NetworkCallbacks(BaseCallback):
                 )
                 
                 if result["status"] == "success":
+                    progress_tracker.update(80, "Converting to visualization format...")
+                    
                     # Convert optimized GraphML to GeoJSON for visualization
                     geojson_result = self.network_constructor.build_network_geojson_from_graphml(
                         graphml_path=result["file_path"],
@@ -109,6 +129,8 @@ class NetworkCallbacks(BaseCallback):
                     )
                     
                     # Display optimization results
+                    progress_tracker.complete(f"Network optimized: {result['node_reduction_percentage']}% nodes reduced, {result['edge_reduction_percentage']}% edges reduced")
+                    
                     status_msg = html.Div([
                         html.P(f"✓ Network optimized successfully", className="success-message"),
                         html.P(f"Nodes: {result['initial_stats']['total_nodes']} → {result['final_stats']['total_nodes']} ({result['node_reduction_percentage']}% reduction)"),
@@ -128,8 +150,12 @@ class NetworkCallbacks(BaseCallback):
                     else:
                         return status_msg, no_update
                 else:
+                    progress_tracker.error(result['message'])
                     return html.P(f"✗ Error: {result['message']}", className="error-message"), no_update
                     
             except Exception as e:
                 logger.error(f"Error optimizing network: {e}")
+                # Import here to avoid circular import
+                from utils.progress_tracker import progress_tracker
+                progress_tracker.error(str(e))
                 return html.P(f"✗ Error: {str(e)}", className="error-message"), no_update

@@ -40,6 +40,14 @@ def create_layout(config=None):
             dcc.Store(id="filtered-buildings"),
             dcc.Store(id="filter-options-store"),
             dcc.Store(id="network-data"),
-            dcc.Store(id="heat-sources-data")
+            dcc.Store(id="heat-sources-data"),
+            # Progress tracking
+            dcc.Store(id="progress-store", data={"active": False, "value": 0, "message": "", "error": False}),
+            dcc.Interval(
+                id="progress-interval",
+                interval=500,  # Update every 500ms
+                n_intervals=0,
+                disabled=False  # Always enabled
+            )
         ], style={"display": "none"})
     ], className="app-container")

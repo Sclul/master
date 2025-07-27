@@ -33,14 +33,23 @@ class BuildingFilter:
                 logger.error(f"Streets file not found: {streets_path}")
                 return None, None
             
+            # Import here to avoid circular import
+            from utils.progress_tracker import progress_tracker
+            progress_tracker.update(20, "Loading building data...")
             buildings_gdf = gpd.read_file(buildings_path)
+            
+            progress_tracker.update(40, "Loading street data...")
             streets_gdf = gpd.read_file(streets_path)
             
             logger.info(f"Loaded {len(buildings_gdf)} buildings and {len(streets_gdf)} street segments")
+            progress_tracker.update(60, "Data loading complete")
             return buildings_gdf, streets_gdf
             
         except Exception as e:
             logger.error(f"Error loading geospatial data: {e}")
+            # Import here to avoid circular import
+            from utils.progress_tracker import progress_tracker
+            progress_tracker.error(f"Failed to load geospatial data: {str(e)}")
             return None, None
     
     def filter_buildings(self, buildings_gdf: gpd.GeoDataFrame, 
@@ -56,6 +65,10 @@ class BuildingFilter:
         filtered_gdf = buildings_gdf.copy()
         original_count = len(filtered_gdf)
         
+        # Import here to avoid circular import
+        from utils.progress_tracker import progress_tracker
+        progress_tracker.update(70, "Applying building filters...")
+        
         # Filter out buildings with zero heat demand
         if filter_criteria.get("exclude_zero_heat_demand", False):
             if self.heat_demand_column in filtered_gdf.columns:
@@ -69,6 +82,8 @@ class BuildingFilter:
         # Filter by heat demand range
         min_heat_demand = filter_criteria.get("min_heat_demand")
         max_heat_demand = filter_criteria.get("max_heat_demand")
+        
+        progress_tracker.update(80, "Applying heat demand filters...")
         
         # Apply min heat demand filter (only if greater than 0)
         if min_heat_demand is not None and min_heat_demand > 0:
@@ -149,6 +164,10 @@ class BuildingFilter:
         else:
             logger.info("No street filter applied - including all streets")
         
+        # Import here to avoid circular import
+        from utils.progress_tracker import progress_tracker
+        progress_tracker.update(90, "Finalizing filtered results...")
+        
         logger.info(f"Building filtering complete: {original_count} -> {len(filtered_gdf)} buildings")
         return filtered_gdf
     
@@ -175,6 +194,10 @@ class BuildingFilter:
             
             output_file = Path(output_path)
             output_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Import here to avoid circular import
+            from utils.progress_tracker import progress_tracker
+            progress_tracker.update(95, "Saving filtered buildings...")
             
             # Ensure all data is preserved when saving
             filtered_buildings_gdf.to_file(output_path, driver="GeoJSON")
