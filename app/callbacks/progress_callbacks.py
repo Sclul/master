@@ -53,11 +53,25 @@ class ProgressCallbacks(BaseCallback):
                 title = "Error"
                 details = state["message"]
             else:
-                # Format elapsed time
+                # Format elapsed time and ETA
                 elapsed = state["elapsed"]
                 time_str = f"{int(elapsed // 60)}m {int(elapsed % 60)}s" if elapsed > 60 else f"{int(elapsed)}s"
+                
                 title = state["message"]
-                details = f"{state['value']}% complete • {time_str} elapsed"
+                
+                # Build details with item counts and ETA
+                details_parts = [f"{state['value']}% complete"]
+                
+                if state["total_items"] and state["processed_items"] is not None:
+                    details_parts.append(f"{state['processed_items']:,}/{state['total_items']:,} items")
+                
+                details_parts.append(f"{time_str} elapsed")
+                
+                if state["eta"] and state["eta"] > 0:
+                    eta_str = f"{int(state['eta'] // 60)}m {int(state['eta'] % 60)}s" if state['eta'] > 60 else f"{int(state['eta'])}s"
+                    details_parts.append(f"~{eta_str} remaining")
+                
+                details = " • ".join(details_parts)
             
             # Auto-reset after completion
             if state["value"] >= 100 and not state["error"] and state["active"]:
@@ -79,12 +93,11 @@ class ProgressCallbacks(BaseCallback):
         
         @self.app.callback(
             Output("progress-interval", "disabled", allow_duplicate=True),
-            [Input("apply-filters-btn", "n_clicks"),
-             Input("generate-network-btn", "n_clicks"), 
+            [Input("generate-network-btn", "n_clicks"), 
              Input("optimize-network-btn", "n_clicks")],
             prevent_initial_call=True
         )
-        def enable_progress_interval(filter_clicks, network_clicks, optimize_clicks):
+        def enable_progress_interval(network_clicks, optimize_clicks):
             """Enable progress interval when any long-running operation starts."""
             # Enable the interval to start tracking progress
             return False

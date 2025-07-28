@@ -43,8 +43,8 @@ class GeospatialCallbacks(BaseCallback):
                 return empty_options, empty_options, empty_options, empty_options, {}
             
             try:
-                # Load buildings data to get filter options
-                buildings_gdf, _ = self.building_filter.load_geospatial_data()
+                # Load buildings data to get filter options (no progress tracking)
+                buildings_gdf, _ = self.building_filter.load_geospatial_data(show_progress=False)
                 
                 if buildings_gdf is None or buildings_gdf.empty:
                     logger.warning("Buildings GDF is None or empty")
@@ -197,12 +197,6 @@ class GeospatialCallbacks(BaseCallback):
             try:
                 logger.info("Applying building filters")
                 
-                # Import here to avoid circular import
-                from utils.progress_tracker import progress_tracker
-                
-                # Start progress tracking
-                progress_tracker.start("Filtering buildings...")
-                
                 # Build filter criteria from UI inputs
                 filter_criteria = {}
                 
@@ -213,8 +207,6 @@ class GeospatialCallbacks(BaseCallback):
                 
                 # Override with UI values
                 filter_criteria["exclude_zero_heat_demand"] = bool(exclude_zero_value and "exclude" in exclude_zero_value)
-                
-                progress_tracker.update(10, "Preparing filter criteria...")
                 
                 # Set min heat demand (default to 0 if empty)
                 if min_heat_demand is not None and min_heat_demand != "":
@@ -243,22 +235,17 @@ class GeospatialCallbacks(BaseCallback):
                 
                 logger.info(f"Filter criteria: {filter_criteria}")
                 
-                # Load and filter buildings with custom criteria
-                filtered_buildings, streets = self.building_filter.load_and_filter_buildings(filter_criteria)
+                # Load and filter buildings with custom criteria (no progress tracking)
+                filtered_buildings, streets = self.building_filter.load_and_filter_buildings(filter_criteria, show_progress=False)
                 
                 if filtered_buildings is None:
-                    progress_tracker.error("Could not load buildings data")
                     return {"status": "error", "message": "Could not load buildings data"}
                 
                 if filtered_buildings.empty:
-                    progress_tracker.complete("No buildings match the current filters")
                     return {"status": "empty", "message": "No buildings match the current filters"}
                 
-                # Save filtered buildings
-                save_result = self.building_filter.save_filtered_buildings(filtered_buildings)
-                
-                # Complete progress tracking
-                progress_tracker.complete(f"Filtered {len(filtered_buildings)} buildings successfully")
+                # Save filtered buildings (no progress tracking)
+                save_result = self.building_filter.save_filtered_buildings(filtered_buildings, show_progress=False)
                 
                 return {
                     **save_result,
@@ -268,9 +255,6 @@ class GeospatialCallbacks(BaseCallback):
 
             except Exception as e:
                 logger.error(f"Error applying building filters: {e}")
-                # Import here to avoid circular import
-                from utils.progress_tracker import progress_tracker
-                progress_tracker.error(str(e))
                 return {"status": "error", "message": str(e)}
         
         @self.app.callback(

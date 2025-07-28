@@ -135,6 +135,8 @@ class GeospatialHandler:
             gdf_filtered.to_file(streets_path, driver="GeoJSON")
             logger.info(f"Streets saved to {streets_path} with columns: {available_columns} (CRS: {gdf_filtered.crs})")
             
+            logger.info(f"Street extraction complete: {len(gdf_filtered):,} segments saved")
+            
             return {"status": "saved"}
             
         except Exception as e:
@@ -176,6 +178,13 @@ class GeospatialHandler:
     def _add_heat_demand_to_buildings(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         """Add heat demand values to buildings GeoDataFrame."""
         try:
+            # Import here to avoid circular import
+            from utils.progress_tracker import progress_tracker
+            
+            # Start progress tracking for heat demand querying
+            total_buildings = len(gdf)
+            progress_tracker.start(f"Querying heat demand for buildings...", total_items=total_buildings)
+            
             # Get GDB layer CRS
             gdb_layer_crs = None
             try:
@@ -201,6 +210,17 @@ class GeospatialHandler:
                         successful_queries += 1
                 else:
                     heat_demands.append(None)
+                
+                # Update progress every 100 buildings or on last building
+                current_building = len(heat_demands)
+                if current_building % 100 == 0 or current_building == total_buildings:
+                    progress_percent = int((current_building / total_buildings) * 100)
+                    progress_tracker.update(progress_percent, 
+                                          f"Queried heat demand: {current_building:,}/{total_buildings:,} buildings ({successful_queries:,} with data)",
+                                          processed_items=current_building)
+            
+            # Complete progress tracking
+            progress_tracker.complete(f"Heat demand query complete: {successful_queries:,}/{total_buildings:,} buildings with data")
             
             # Add heat demand column with consistent name
             gdf["heat_demand"] = heat_demands
@@ -211,6 +231,9 @@ class GeospatialHandler:
             
         except Exception as e:
             logger.error(f"Error adding heat demand to buildings: {e}")
+            # Import here to avoid circular import
+            from utils.progress_tracker import progress_tracker
+            progress_tracker.error(f"Heat demand query failed: {str(e)}")
             # Return original GDF if heat demand processing fails
             return gdf
     
@@ -219,12 +242,29 @@ class GeospatialHandler:
         try:
             polygon = shape(geojson["geometry"])
             
+            # Import here to avoid circular import
+            from utils.progress_tracker import progress_tracker
+            
+            # Estimate building count based on area (rough approximation)
+            area_km2 = polygon.area * 111 * 111  # Convert to rough km²
+            estimated_buildings = int(area_km2 * 300)  # Rough estimate: 300 buildings per km²
+            
+            progress_tracker.start(f"Extracting buildings from {area_km2:.1f} km² area...", total_items=estimated_buildings)
+            
+            # Query buildings from OpenStreetMap
+            logger.info("Querying OpenStreetMap for buildings...")
+            
             # Get buildings from polygon with minimal tags
             gdf = ox.features_from_polygon(polygon, tags={"building": True})
             
             if gdf.empty:
                 logger.info("No buildings found in the selected area.")
                 return {"status": "no_buildings"}
+            
+            # Log building count found
+            actual_building_count = len(gdf)
+            progress_tracker.update_items_processed(actual_building_count, f"Processing {actual_building_count:,} buildings...")
+            logger.info(f"Processing {actual_building_count:,} buildings...")
             
             # Keep only essential columns
             essential_columns = ['geometry', 'building']
@@ -272,6 +312,10 @@ class GeospatialHandler:
             
             # Add heat demand data automatically
             logger.info("Querying heat demand data for buildings...")
+            
+            # Import here to avoid circular import (only for heat demand progress)
+            from utils.progress_tracker import progress_tracker
+            
             gdf_filtered = self._add_heat_demand_to_buildings(gdf_filtered)
 
             # Apply building clustering if enabled in configuration
@@ -283,11 +327,16 @@ class GeospatialHandler:
                 logger.info("Building clustering disabled in configuration")
 
             # Save to GeoJSON (will be in EPSG:5243)
+            progress_tracker.update(95, "Saving building data...")
             gdf_filtered.to_file(buildings_path, driver="GeoJSON")
             logger.info(f"Buildings with heat demand data saved to {buildings_path} (CRS: {gdf_filtered.crs})")
             
             # Generate summary statistics
             heat_demand_stats = self._get_heat_demand_summary(gdf_filtered)
+            
+            # Complete the progress tracker at 100%
+            progress_tracker.complete(f"Building extraction complete: {len(gdf_filtered):,} buildings processed")
+            logger.info(f"Building extraction complete: {len(gdf_filtered):,} buildings processed")
             
             # Add clustering statistics if clustering was applied
             result_data = {

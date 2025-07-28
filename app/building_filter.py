@@ -19,7 +19,7 @@ class BuildingFilter:
         self.data_paths = config.data_paths
         self.heat_demand_column = "heat_demand" 
         
-    def load_geospatial_data(self) -> Tuple[Optional[gpd.GeoDataFrame], Optional[gpd.GeoDataFrame]]:
+    def load_geospatial_data(self, show_progress: bool = False) -> Tuple[Optional[gpd.GeoDataFrame], Optional[gpd.GeoDataFrame]]:
         """Load buildings and streets data from saved files."""
         try:
             buildings_path = self.data_paths["buildings_path"]
@@ -33,27 +33,19 @@ class BuildingFilter:
                 logger.error(f"Streets file not found: {streets_path}")
                 return None, None
             
-            # Import here to avoid circular import
-            from utils.progress_tracker import progress_tracker
-            progress_tracker.update(20, "Loading building data...")
             buildings_gdf = gpd.read_file(buildings_path)
-            
-            progress_tracker.update(40, "Loading street data...")
             streets_gdf = gpd.read_file(streets_path)
             
             logger.info(f"Loaded {len(buildings_gdf)} buildings and {len(streets_gdf)} street segments")
-            progress_tracker.update(60, "Data loading complete")
+            
             return buildings_gdf, streets_gdf
             
         except Exception as e:
             logger.error(f"Error loading geospatial data: {e}")
-            # Import here to avoid circular import
-            from utils.progress_tracker import progress_tracker
-            progress_tracker.error(f"Failed to load geospatial data: {str(e)}")
             return None, None
     
     def filter_buildings(self, buildings_gdf: gpd.GeoDataFrame, 
-                        filter_criteria: Optional[Dict[str, Any]] = None) -> gpd.GeoDataFrame:
+                        filter_criteria: Optional[Dict[str, Any]] = None, show_progress: bool = True) -> gpd.GeoDataFrame:
         """Filter buildings based on criteria while preserving all data."""
         if buildings_gdf.empty:
             return buildings_gdf
@@ -65,25 +57,18 @@ class BuildingFilter:
         filtered_gdf = buildings_gdf.copy()
         original_count = len(filtered_gdf)
         
-        # Import here to avoid circular import
-        from utils.progress_tracker import progress_tracker
-        progress_tracker.update(70, "Applying building filters...")
-        
         # Filter out buildings with zero heat demand
         if filter_criteria.get("exclude_zero_heat_demand", False):
             if self.heat_demand_column in filtered_gdf.columns:
                 mask = (filtered_gdf[self.heat_demand_column].notna()) & \
                        (filtered_gdf[self.heat_demand_column] != 0)
                 filtered_gdf = filtered_gdf[mask]
-                logger.info(f"After zero/null exclusion: {len(filtered_gdf)} buildings remaining")
             else:
                 logger.warning(f"Heat demand column '{self.heat_demand_column}' not found in buildings data")
         
         # Filter by heat demand range
         min_heat_demand = filter_criteria.get("min_heat_demand")
         max_heat_demand = filter_criteria.get("max_heat_demand")
-        
-        progress_tracker.update(80, "Applying heat demand filters...")
         
         # Apply min heat demand filter (only if greater than 0)
         if min_heat_demand is not None and min_heat_demand > 0:
@@ -164,25 +149,21 @@ class BuildingFilter:
         else:
             logger.info("No street filter applied - including all streets")
         
-        # Import here to avoid circular import
-        from utils.progress_tracker import progress_tracker
-        progress_tracker.update(90, "Finalizing filtered results...")
-        
         logger.info(f"Building filtering complete: {original_count} -> {len(filtered_gdf)} buildings")
         return filtered_gdf
     
-    def load_and_filter_buildings(self, filter_criteria: Optional[Dict[str, Any]] = None) -> Tuple[Optional[gpd.GeoDataFrame], Optional[gpd.GeoDataFrame]]:
+    def load_and_filter_buildings(self, filter_criteria: Optional[Dict[str, Any]] = None, show_progress: bool = True) -> Tuple[Optional[gpd.GeoDataFrame], Optional[gpd.GeoDataFrame]]:
         """Load buildings and streets data, then apply filters to buildings."""
-        buildings_gdf, streets_gdf = self.load_geospatial_data()
+        buildings_gdf, streets_gdf = self.load_geospatial_data(show_progress=show_progress)
         
         if buildings_gdf is None or streets_gdf is None:
             return None, None
         
-        filtered_buildings = self.filter_buildings(buildings_gdf, filter_criteria)
+        filtered_buildings = self.filter_buildings(buildings_gdf, filter_criteria, show_progress=show_progress)
         return filtered_buildings, streets_gdf
     
     def save_filtered_buildings(self, filtered_buildings_gdf: gpd.GeoDataFrame, 
-                               output_path: Optional[str] = None) -> Dict[str, Any]:
+                               output_path: Optional[str] = None, show_progress: bool = True) -> Dict[str, Any]:
         """Save filtered buildings to a GeoJSON file."""
         try:
             if filtered_buildings_gdf.empty:
@@ -194,10 +175,6 @@ class BuildingFilter:
             
             output_file = Path(output_path)
             output_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            # Import here to avoid circular import
-            from utils.progress_tracker import progress_tracker
-            progress_tracker.update(95, "Saving filtered buildings...")
             
             # Ensure all data is preserved when saving
             filtered_buildings_gdf.to_file(output_path, driver="GeoJSON")
