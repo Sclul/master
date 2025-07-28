@@ -41,65 +41,75 @@ def create_control_panel(config=None):
         
         html.H3("Controls"),
         
-        # Measurement tools
+        # Measurement tools - Updated with unified classes
         html.Section([
             html.H4("Area Selection"),
-            html.Button("Draw Analysis Area", id="start-measurement-btn", className="btn btn-primary"),
-            html.Div(id="measurement-status"),
+            html.Button("Draw Analysis Area", 
+                       id="start-measurement-btn", 
+                       className="btn btn-primary"),  # Unified button class
+            html.Div(id="measurement-status", className="status-display"),  # Unified status class
             # Add data summary under area selection
             html.Div([
                 html.H4("Data Summary", style={"margin-top": "1rem"}),
-                html.Div(id="data-summary", className="summary-area")
+                html.Div(id="data-summary", className="summary-display")  # Unified summary class
             ])
-        ], className="control-group"),
+        ], className="control-section"),  # Unified section class
         
-        # Heat source placement (UI only)
+        # Heat source placement - Updated with unified classes
         html.Section([
             html.H4("Heat Sources"),
-            html.Button("Add Heat Source", id="add-heat-source-btn", className="btn btn-secondary"),
-            html.Button("Clear Heat Sources", id="clear-heat-sources-btn", className="btn btn-secondary"),
+            html.Button("Add Heat Source", 
+                       id="add-heat-source-btn", 
+                       className="btn btn-secondary"),  # Unified button class
+            html.Button("Clear Heat Sources", 
+                       id="clear-heat-sources-btn", 
+                       className="btn btn-secondary"),  # Unified button class
             html.Div([
-                html.Label("Annual Heat Production (kW/year):"),
+                html.Label("Annual Heat Production (kW/year):", className="form-label"),  # Unified label
                 dcc.Input(
                     id="heat-source-production-input",
                     type="number",
                     placeholder="e.g., 1000",
                     value=1000,
                     min=0,
-                    className="input-small"
+                    className="form-input"  # Unified input class
                 )
-            ], className="input-group"),
-            html.Div(id="heat-source-status"),
-            html.Div(id="heat-source-summary")
-        ], className="control-group"),
+            ], className="form-group"),  # Unified form group
+            html.Div(id="heat-source-status", className="status-display"),  # Unified status
+            html.Div(id="heat-source-summary", className="summary-display")  # Unified summary
+        ], className="control-section"),  # Unified section class
         
-        # Network generation
+        # Network generation - Updated with unified classes
         html.Section([
             html.H4("District Heating Network"),
-            html.Button("Generate Network", id="generate-network-btn", className="btn btn-primary"),
-            html.Div(id="network-status")
-        ], className="control-group"),
+            html.Button("Generate Network", 
+                       id="generate-network-btn", 
+                       className="btn btn-primary"),  # Unified button class
+            html.Div(id="network-status", className="status-display")  # Unified status
+        ], className="control-section"),  # Unified section class
         
-        # Graph optimization
+        # Graph optimization - Updated with unified classes
         html.Section([
             html.H4("Graph Optimization"),
-            html.Button("Optimize Network", id="optimize-network-btn", className="btn btn-primary"),
-            html.Div(id="network-optimization-status"),
+            html.Button("Optimize Network", 
+                       id="optimize-network-btn", 
+                       className="btn btn-primary"),  # Unified button class
+            html.Div(id="network-optimization-status", className="status-display"),  # Unified status
             
             html.Div([
-                html.Label("Max Building Connection Distance (m):"),
+                html.Label("Max Building Connection Distance (m):", className="form-label"),  # Unified label
                 dcc.Input(
                     id="max-building-connection-input",
                     type="number",
                     placeholder="e.g., 100",
                     value=config.graph_filters.get("max_building_connection_distance", 100.0) if config else 100.0,
                     min=0,
-                    className="input-small"
+                    className="form-input"  # Unified input class
                 )
-            ], className="input-group"),
+            ], className="form-group"),  # Unified form group
             
             html.Div([
-                html.Label("Network Optimization:"),
+                html.Label("Network Optimization:", className="form-label"),  # Unified label
                 dcc.Dropdown(
                     id="pruning-algorithm-dropdown",
                     options=[
@@ -109,88 +119,104 @@ def create_control_panel(config=None):
                         {"label": "Steiner Tree", "value": "steiner_tree"}
                     ],
                     value=config.graph_filters.get("default_pruning_algorithm", "none") if config else "none",
-                    className="dropdown-small"
+                    multi=False,  # Ensure single selection only
+                    className="form-dropdown"  # Unified dropdown class
                 )
-            ], className="input-group")
-        ], className="control-group"),
+            ], className="form-group")  # Unified form group
+        ], className="control-section"),  # Unified section class
         
-        # Heat demand filters
+        # Building & Heat Demand Filters - Combined section with unified classes
         html.Section([
-            html.H4("Heat Demand"),
+            html.H4("Building & Heat Demand Filters"),
             
-            html.Button("Apply Filters", id="apply-filters-btn", className="btn btn-primary"),
-            html.Div(id="filter-status"),
+            html.Button("Apply Filters", 
+                       id="apply-filters-btn", 
+                       className="btn btn-primary"),  # Unified button class
+            html.Div(id="filter-status", className="status-display"),  # Unified status
+            
+            # Heat Demand Filters Subsection
             html.Div([
-                dcc.Checklist(
-                    id="exclude-zero-heat-demand",
-                    options=[{"label": "Exclude zero heat demand", "value": "exclude"}],
-                    value=["exclude"] if default_exclude_zero else []
-                )
+                html.H5("Heat Demand", style={"margin": "1rem 0 0.5rem 0", "fontSize": "0.9rem", "fontWeight": "600", "color": "#2d3748"}),
+                
+                html.Div([
+                    dcc.Checklist(
+                        id="exclude-zero-heat-demand",
+                        options=[{"label": "Exclude zero heat demand", "value": "exclude"}],
+                        value=["exclude"] if default_exclude_zero else [],
+                        className="modern-checkbox"  # Unified checkbox class
+                    )
+                ], className="form-group"),  # Unified form group
+                
+                html.Div([
+                    html.Div([
+                        html.Label("Min Heat Demand:", className="form-label"),  # Unified label
+                        dcc.Input(
+                            id="min-heat-demand",
+                            type="number",
+                            placeholder="Min kWh/year",
+                            value=default_min_heat,
+                            className="form-input"  # Unified input class
+                        )
+                    ], style={"width": "48%", "display": "inline-block"}),
+                    
+                    html.Div([
+                        html.Label("Max Heat Demand:", className="form-label"),  # Unified label
+                        dcc.Input(
+                            id="max-heat-demand",
+                            type="number",
+                            placeholder="Max kWh/year",
+                            value=default_max_heat,
+                            className="form-input"  # Unified input class
+                        )
+                    ], style={"width": "48%", "display": "inline-block", "marginLeft": "4%"})
+                ], className="form-group"),  # Unified form group
             ]),
             
+            # Building Attribute Filters Subsection
             html.Div([
-                html.Label("Min:"),
-                dcc.Input(
-                    id="min-heat-demand",
-                    type="number",
-                    placeholder="Min",
-                    value=default_min_heat,
-                    className="input-small"
-                )
-            ], className="input-group"),
-            
-            html.Div([
-                html.Label("Max:"),
-                dcc.Input(
-                    id="max-heat-demand",
-                    type="number",
-                    placeholder="Max",
-                    value=default_max_heat,
-                    className="input-small"
-                )
-            ], className="input-group"),
-        ], className="control-group"),
-        
-        # Building filters
-        html.Section([
-            html.H4("Building Filters"),
-            
-            html.Div([
-                html.Label("Street:"),
-                dcc.Dropdown(
-                    id="street-filter",
-                    placeholder="Select...",
-                    multi=True
-                )
-            ], className="filter-item"),
-            
-            html.Div([
-                html.Label("Postcode:"),
-                dcc.Dropdown(
-                    id="postcode-filter",
-                    placeholder="Select...",
-                    multi=True
-                )
-            ], className="filter-item"),
-            
-            html.Div([
-                html.Label("City:"),
-                dcc.Dropdown(
-                    id="city-filter",
-                    placeholder="Select...",
-                    multi=True
-                )
-            ], className="filter-item"),
-            
-            html.Div([
-                html.Label("Building Use:"),
-                dcc.Dropdown(
-                    id="building-use-filter",
-                    placeholder="Select...",
-                    multi=True
-                )
-            ], className="filter-item"),
-        ], className="control-group"),
+                html.H5("Building Attributes", style={"margin": "1.5rem 0 0.5rem 0", "fontSize": "0.9rem", "fontWeight": "600", "color": "#2d3748"}),
+                
+                html.Div([
+                    html.Label("Street:", className="form-label"),  # Unified label
+                    dcc.Dropdown(
+                        id="street-filter",
+                        placeholder="Select streets...",
+                        multi=True,
+                        className="form-dropdown"  # Unified dropdown class
+                    )
+                ], className="form-group"),  # Unified form group
+                
+                html.Div([
+                    html.Label("Postcode:", className="form-label"),  # Unified label
+                    dcc.Dropdown(
+                        id="postcode-filter",
+                        placeholder="Select postcodes...",
+                        multi=True,
+                        className="form-dropdown"  # Unified dropdown class
+                    )
+                ], className="form-group"),  # Unified form group
+                
+                html.Div([
+                    html.Label("City:", className="form-label"),  # Unified label
+                    dcc.Dropdown(
+                        id="city-filter",
+                        placeholder="Select cities...",
+                        multi=True,
+                        className="form-dropdown"  # Unified dropdown class
+                    )
+                ], className="form-group"),  # Unified form group
+                
+                html.Div([
+                    html.Label("Building Use:", className="form-label"),  # Unified label
+                    dcc.Dropdown(
+                        id="building-use-filter",
+                        placeholder="Select building uses...",
+                        multi=True,
+                        className="form-dropdown"  # Unified dropdown class
+                    )
+                ], className="form-group"),  # Unified form group
+            ])
+        ], className="control-section"),  # Unified section class
 
     ], className="control-panel")
 
