@@ -17,7 +17,9 @@ class ProgressCallbacks(BaseCallback):
         
         @self.app.callback(
             [Output("progress-container", "style"),
+             Output("progress-container", "className"),
              Output("progress-bar", "style"),
+             Output("progress-bar", "className"),
              Output("progress-title", "children"),
              Output("progress-details", "children"),
              Output("progress-interval", "disabled")],
@@ -25,38 +27,37 @@ class ProgressCallbacks(BaseCallback):
             prevent_initial_call=True
         )
         def update_progress(n_intervals):
-            """Update progress bar display."""
+            """Update progress bar display with enhanced visual feedback."""
             from utils.progress_tracker import progress_tracker
             
             state = progress_tracker.get_state()
             
-            # Always show container (keep progress bar visible)
+            # Container styling and classes
             container_style = {"display": "block"}
+            container_class = "progress-widget active" if state["active"] else "progress-widget"
             
             # Progress bar color based on state
             bar_color = "#dc3545" if state["error"] else "#007bff"  # Red for error, blue for normal
             
-            # Progress bar style with current width
+            # Progress bar style with current width and enhanced styling
             progress_bar_style = {
                 "width": f"{state['value']}%" if state["active"] else "0%",
-                "height": "100%",
-                "background-color": bar_color,
-                "border-radius": "4px",
-                "transition": "width 0.3s ease"
+                "background": f"linear-gradient(90deg, {bar_color}, {bar_color}dd)" if state["error"] else None
             }
+            
+            # Add shimmer effect for active operations
+            progress_bar_class = "progress-bar-fill active" if state["active"] and not state["error"] else "progress-bar-fill"
             
             # Title and details based on state
             if not state["active"]:
                 title = "Ready"
                 details = "No operation in progress"
             elif state["error"]:
-                title = "Error"
+                title = "❌ Error"
                 details = state["message"]
             else:
-                # Format ETA
-                elapsed = state["elapsed"]
-                
-                title = state["message"]
+                # Format ETA with icon
+                title = f"⚡ {state['message']}"
                 
                 # Build details with item counts and ETA
                 details_parts = [f"{state['value']}% complete"]
@@ -87,7 +88,9 @@ class ProgressCallbacks(BaseCallback):
             
             return (
                 container_style,
+                container_class,
                 progress_bar_style,
+                progress_bar_class,
                 title,
                 details,
                 False  # Keep interval always active

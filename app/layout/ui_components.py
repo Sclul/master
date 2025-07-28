@@ -3,41 +3,23 @@ from dash import dcc, html # type: ignore
 
 
 def create_progress_bar():
-    """Create a progress bar component for long-running operations."""
-    return html.Div(
-        id="progress-container",
-        style={"display": "block"},  # Always visible
-        children=[
-            html.H5("Status", id="progress-title"),
-            html.Div(
-                style={
-                    "width": "100%", 
-                    "height": "20px", 
-                    "background-color": "#e9ecef", 
-                    "border-radius": "4px",
-                    "margin": "10px 0"
-                },
-                children=[
-                    html.Div(
-                        id="progress-bar",
-                        style={
-                            "width": "0%",
-                            "height": "100%",
-                            "background-color": "#007bff",
-                            "border-radius": "4px",
-                            "transition": "width 0.3s ease"
-                        }
-                    )
-                ]
-            ),
+    """Create an enhanced progress bar with better visual feedback."""
+    return html.Div([
+        html.Div([
+            html.H5("Status", id="progress-title", className="progress-title"),
+            html.Div([
+                html.Div(
+                    id="progress-bar",
+                    className="progress-bar-fill"
+                )
+            ], className="progress-bar-container"),
             html.Div(
                 id="progress-details",
-                style={"font-size": "0.9em", "color": "#666"},
+                className="progress-details",
                 children=["Ready"]
             )
-        ],
-        className="mb-3 p-3 border rounded"
-    )
+        ], className="progress-content")
+    ], id="progress-container", className="progress-widget")
 
 
 def create_control_panel(config=None):
@@ -62,7 +44,7 @@ def create_control_panel(config=None):
         # Measurement tools
         html.Section([
             html.H4("Area Selection"),
-            html.Button("Draw Analysis Area", id="start-measurement-btn", className="btn-primary"),
+            html.Button("Draw Analysis Area", id="start-measurement-btn", className="btn btn-primary"),
             html.Div(id="measurement-status"),
             # Add data summary under area selection
             html.Div([
@@ -74,8 +56,8 @@ def create_control_panel(config=None):
         # Heat source placement (UI only)
         html.Section([
             html.H4("Heat Sources"),
-            html.Button("Add Heat Source", id="add-heat-source-btn", className="btn-secondary"),
-            html.Button("Clear Heat Sources", id="clear-heat-sources-btn", className="btn-secondary"),
+            html.Button("Add Heat Source", id="add-heat-source-btn", className="btn btn-secondary"),
+            html.Button("Clear Heat Sources", id="clear-heat-sources-btn", className="btn btn-secondary"),
             html.Div([
                 html.Label("Annual Heat Production (kW/year):"),
                 dcc.Input(
@@ -94,14 +76,14 @@ def create_control_panel(config=None):
         # Network generation
         html.Section([
             html.H4("District Heating Network"),
-            html.Button("Generate Network", id="generate-network-btn", className="btn-primary"),
+            html.Button("Generate Network", id="generate-network-btn", className="btn btn-primary"),
             html.Div(id="network-status")
         ], className="control-group"),
         
         # Graph optimization
         html.Section([
             html.H4("Graph Optimization"),
-            html.Button("Optimize Network", id="optimize-network-btn", className="btn-primary"),
+            html.Button("Optimize Network", id="optimize-network-btn", className="btn btn-primary"),
             html.Div(id="network-optimization-status"),
             
             html.Div([
@@ -136,7 +118,7 @@ def create_control_panel(config=None):
         html.Section([
             html.H4("Heat Demand"),
             
-            html.Button("Apply Filters", id="apply-filters-btn", className="btn-primary"),
+            html.Button("Apply Filters", id="apply-filters-btn", className="btn btn-primary"),
             html.Div(id="filter-status"),
             html.Div([
                 dcc.Checklist(
