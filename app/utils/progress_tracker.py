@@ -13,6 +13,7 @@ class ProgressTracker:
     def __init__(self):
         self.reset()
         self._lock = threading.Lock()
+        self._reset_timer = None  # Track the reset timer
     
     def reset(self):
         """Reset progress state."""
@@ -28,6 +29,11 @@ class ProgressTracker:
     def start(self, message: str = "Processing...", total_items: int = None):
         """Start tracking progress."""
         with self._lock:
+            # Cancel any pending reset timer
+            if self._reset_timer and self._reset_timer.is_alive():
+                self._reset_timer.cancel()
+                self._reset_timer = None
+                
             self.active = True
             self.value = 0
             self.message = message

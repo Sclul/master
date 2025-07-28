@@ -54,13 +54,21 @@ def create_control_panel(config=None):
         default_max_heat = building_filters.get("max_heat_demand")
     
     return html.Div([
+        # Add progress bar at the top
+        create_progress_bar(),
+        
         html.H3("Controls"),
         
         # Measurement tools
         html.Section([
             html.H4("Area Selection"),
             html.Button("Draw Analysis Area", id="start-measurement-btn", className="btn-primary"),
-            html.Div(id="measurement-status")
+            html.Div(id="measurement-status"),
+            # Add data summary under area selection
+            html.Div([
+                html.H4("Data Summary", style={"margin-top": "1rem"}),
+                html.Div(id="data-summary", className="summary-area")
+            ])
         ], className="control-group"),
         
         # Heat source placement (UI only)
@@ -210,11 +218,7 @@ def create_status_panel():
     return html.Div([
         html.H3("Status"),
         
-        # Add progress bar before existing status
-        create_progress_bar(),
+        # Status panel is now just for future status content
+        # Progress bar and data summary moved to left sidebar
         
-        html.Section([
-            html.H4("Data Summary"),
-            html.Div(id="data-summary", className="summary-area")
-        ]),
     ], className="status-panel")

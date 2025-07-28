@@ -53,9 +53,8 @@ class ProgressCallbacks(BaseCallback):
                 title = "Error"
                 details = state["message"]
             else:
-                # Format elapsed time and ETA
+                # Format ETA
                 elapsed = state["elapsed"]
-                time_str = f"{int(elapsed // 60)}m {int(elapsed % 60)}s" if elapsed > 60 else f"{int(elapsed)}s"
                 
                 title = state["message"]
                 
@@ -65,22 +64,25 @@ class ProgressCallbacks(BaseCallback):
                 if state["total_items"] and state["processed_items"] is not None:
                     details_parts.append(f"{state['processed_items']:,}/{state['total_items']:,} items")
                 
-                details_parts.append(f"{time_str} elapsed")
-                
                 if state["eta"] and state["eta"] > 0:
                     eta_str = f"{int(state['eta'] // 60)}m {int(state['eta'] % 60)}s" if state['eta'] > 60 else f"{int(state['eta'])}s"
                     details_parts.append(f"~{eta_str} remaining")
                 
                 details = " • ".join(details_parts)
             
-            # Auto-reset after completion
+            # Auto-reset after completion - but only if no new operation has started
             if state["value"] >= 100 and not state["error"] and state["active"]:
                 def reset_progress():
                     import time
                     time.sleep(3)  # Wait 3 seconds before resetting
-                    progress_tracker.reset()
+                    # Only reset if still at 100% (no new operation started)
+                    current_state = progress_tracker.get_state()
+                    if current_state["value"] >= 100 and current_state["active"]:
+                        progress_tracker.reset()
                 
+                # Store timer reference so it can be cancelled if needed
                 timer = threading.Timer(3.0, reset_progress)
+                progress_tracker._reset_timer = timer
                 timer.start()
             
             return (

@@ -655,7 +655,14 @@ button {
     background: #f8f9fa;
     border: 1px solid #e9ecef;
     border-radius: 8px;
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+}
+
+/* Progress bar in sidebar should be more compact */
+.sidebar #progress-container {
     margin-bottom: 1rem;
+    padding: 0.75rem;
 }
 
 #progress-container h5 {
@@ -708,6 +715,28 @@ button {
     font-size: 0.875rem;
     color: #2d3748;
     min-height: 80px;
+}
+
+/* Data summary in sidebar should be more compact */
+.sidebar .summary-area {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    padding: 0.5rem;
+    min-height: 60px;
+    font-size: 0.8rem;
+}
+
+.sidebar .summary-area h4 {
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #4a5568;
+}
+
+.sidebar .summary-area p {
+    margin: 0.25rem 0;
+    line-height: 1.4;
 }
 
 .log-display {
