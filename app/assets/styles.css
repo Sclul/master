@@ -7,16 +7,17 @@
 
 /* ===== CSS VARIABLES ===== */
 :root {
-    /* Enhanced Color System */
-    --primary: #4299e1;
-    --primary-dark: #3182ce;
+    /* Enhanced Color System - Standardized Naming */
+    --primary-50: #eff6ff;
+    --primary-100: #dbeafe;
+    --primary-200: #bfdbfe;
+    --primary-300: #93c5fd;
+    --primary-400: #60a5fa;
     --primary-500: #3b82f6;
     --primary-600: #2563eb;
     --primary-700: #1d4ed8;
     --primary-800: #1e40af;
-    --primary-100: #dbeafe;
-    --primary-50: #eff6ff;
-    --primary-200: #bfdbfe;
+    --primary-900: #1e3a8a;
     
     --gray-50: #f7fafc;
     --gray-100: #edf2f7;
@@ -60,11 +61,13 @@
     --text-lg: 1.125rem;
     --text-xl: 1.25rem;
     
-    /* Borders & Shadows */
+    /* Borders & Shadows - Standardized Naming */
+    --radius-xs: 0.125rem;
     --radius-sm: 0.25rem;
     --radius-md: 0.375rem;
     --radius-lg: 0.5rem;
     --radius-xl: 0.75rem;
+    --radius-2xl: 1rem;
     
     --shadow: 0 1px 3px rgba(0,0,0,0.1);
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
@@ -72,10 +75,9 @@
     --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
     --shadow-xl: 0 20px 25px rgba(0,0,0,0.1);
     
-    /* Component Specific Variables */
+    /* Component Specific Variables - Standardized */
     --btn-height: 40px;
     --input-height: 40px;
-    --border-radius: 6px;
     --border-width: 2px;
     --focus-ring: 0 0 0 3px;
     
@@ -399,18 +401,7 @@ body {
     border-top: 2px solid currentColor;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
-}
-
-/* Legacy button support - maps to unified system */
-button:not(.btn) {
-    padding: var(--space-3) var(--space-4);
-    border: 2px solid transparent;
-    border-radius: 6px;
-    font-size: var(--text-sm);
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    min-height: 40px;
+    will-change: transform;
 }
 
 /* Button Animations */
@@ -425,8 +416,8 @@ button:not(.btn) {
 }
 
 /* ===== BACKWARD COMPATIBILITY ===== */
-/* Support for legacy button classes without .btn */
-.btn-primary:not(.btn) {
+/* Legacy button support - maps to unified system */
+button:not(.btn) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -449,38 +440,9 @@ button:not(.btn) {
     color: white;
 }
 
-.btn-primary:not(.btn):hover:not(:disabled) {
+button:not(.btn):hover:not(:disabled) {
     background: var(--primary-600);
     border-color: var(--primary-600);
-    transform: translateY(-1px);
-}
-
-.btn-secondary:not(.btn) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--gray-500);
-    border-radius: 6px;
-    font-size: var(--text-sm);
-    font-weight: 500;
-    line-height: 1;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-decoration: none;
-    min-height: 40px;
-    width: 100%;
-    margin-bottom: var(--space-2);
-    position: relative;
-    overflow: hidden;
-    background: var(--gray-500);
-    color: white;
-}
-
-.btn-secondary:not(.btn):hover:not(:disabled) {
-    background: var(--gray-600);
-    border-color: var(--gray-600);
     transform: translateY(-1px);
 }
 
@@ -506,7 +468,7 @@ button:not(.btn) {
     width: 100%;
     padding: var(--space-3);
     border: 1px solid var(--gray-200);
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
     font-size: var(--text-sm);
     background: white;
     transition: all var(--transition-base);
@@ -545,7 +507,7 @@ button:not(.btn) {
     color: var(--gray-700);
     cursor: pointer;
     padding: var(--space-2);
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
     transition: background-color var(--transition-base);
     margin-bottom: 0;
 }
@@ -576,43 +538,36 @@ button:not(.btn) {
 }
 
 /* Dropdown Styling - Unified with form system */
-.Select-control {
+.Select-control,
+.dropdown-filter .Select-control,
+.dropdown-small .Select-control,
+.form-dropdown .Select-control {
     border: 1px solid var(--gray-200) !important;
-    border-radius: var(--border-radius) !important;
+    border-radius: var(--radius-md) !important;
     min-height: var(--input-height) !important;
     font-size: var(--text-sm) !important;
     background: white !important;
     transition: all var(--transition-base) !important;
 }
 
-.Select-control:hover {
+.Select-control:hover,
+.dropdown-filter .Select-control:hover,
+.dropdown-small .Select-control:hover,
+.form-dropdown .Select-control:hover {
     border-color: var(--gray-300) !important;
 }
 
-.Select-control.is-focused {
+.Select-control.is-focused,
+.Select--is-focused .Select-control,
+.dropdown-filter .Select--is-focused .Select-control,
+.dropdown-small .Select-control.is-focused,
+.form-dropdown .Select--is-focused .Select-control {
     border-color: var(--primary-500) !important;
     box-shadow: var(--focus-ring) var(--primary-100) !important;
 }
 
 .dropdown-filter {
     margin-bottom: var(--space-2);
-}
-
-.dropdown-filter .Select-control {
-    border: 1px solid var(--gray-200);
-    border-radius: var(--border-radius);
-    background: white;
-    min-height: var(--input-height);
-    transition: all var(--transition-base);
-}
-
-.dropdown-filter .Select-control:hover {
-    border-color: var(--gray-300);
-}
-
-.dropdown-filter .Select--is-focused .Select-control {
-    border-color: var(--primary-500);
-    box-shadow: var(--focus-ring) var(--primary-100);
 }
 
 .dropdown-filter .Select-placeholder {
@@ -627,7 +582,7 @@ button:not(.btn) {
 
 .dropdown-filter .Select-menu-outer {
     border: 1px solid var(--gray-200);
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     z-index: 1000;
 }
@@ -652,28 +607,6 @@ button:not(.btn) {
 .dropdown-filter .Select-option.is-selected {
     background-color: var(--primary-500);
     color: white;
-}
-
-.dropdown-small {
-    width: 100%;
-}
-
-.dropdown-small .Select-control {
-    border: 1px solid var(--gray-200) !important;
-    border-radius: var(--border-radius) !important;
-    min-height: var(--input-height) !important;
-    font-size: var(--text-sm) !important;
-    background: white !important;
-    transition: all var(--transition-base) !important;
-}
-
-.dropdown-small .Select-control:hover {
-    border-color: var(--gray-300) !important;
-}
-
-.dropdown-small .Select-control.is-focused {
-    border-color: var(--primary-500) !important;
-    box-shadow: var(--focus-ring) var(--primary-100) !important;
 }
 
 /* Checklists - Unified styling */
@@ -871,6 +804,7 @@ button:not(.btn) {
     bottom: 0;
     background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
     animation: shimmer 1.5s infinite;
+    will-change: transform;
 }
 
 .progress-details,
@@ -960,7 +894,7 @@ button:not(.btn) {
 /* ===== UNIFIED MESSAGE SYSTEM ===== */
 .message {
     padding: var(--space-3);
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
     margin: var(--space-2) 0;
     font-size: var(--text-sm);
     border-left: 4px solid;
@@ -1136,7 +1070,7 @@ button:not(.btn) {
 
 .modern-map-container {
     background: white;
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-2xl);
     box-shadow: var(--shadow-lg);
     overflow: hidden;
     height: 100%;
@@ -1229,7 +1163,7 @@ button:not(.btn) {
 /* ===== TAB NAVIGATION ===== */
 .enhanced-status-panel {
     background: white;
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-2xl);
     box-shadow: var(--shadow-lg);
     overflow: hidden;
     height: fit-content;
@@ -1410,12 +1344,6 @@ button:not(.btn) {
     animation: slideIn var(--transition-base);
 }
 
-.control-section:hover {
-    background-color: var(--gray-50);
-    transform: translateY(-1px);
-    transition: all var(--transition-base);
-}
-
 /* ===== LOADING STATES ===== */
 .loading {
     position: relative;
@@ -1435,6 +1363,7 @@ button:not(.btn) {
     border-top: 2px solid var(--primary-600);
     border-radius: 50%;
     animation: spin 1s linear infinite;
+    will-change: transform;
 }
 
 /* ===== NOTIFICATION STYLES ===== */
@@ -1697,32 +1626,4 @@ input:focus,
 
 .filter-item:last-child {
     margin-bottom: 0;
-}
-
-.input-group {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-}
-
-.input-group label {
-    font-size: var(--text-sm);
-    font-weight: 500;
-    color: var(--gray-700);
-}
-
-.input-small {
-    padding: 0.375rem 0.5rem;
-    border: 1px solid var(--gray-300);
-    border-radius: 4px;
-    font-size: var(--text-sm);
-    background: white;
-    transition: border-color 0.2s;
-}
-
-.input-small:focus {
-    outline: none;
-    border-color: var(--blue-500);
-    box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.1);
 }
