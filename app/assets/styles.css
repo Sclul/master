@@ -1070,7 +1070,7 @@ button:not(.btn) {
 }
 
 .modern-checkbox label:hover {
-    background: var(--gray-100);
+    background: var(--gray-50);
 }
 
 .modern-checkbox input[type="checkbox"] {
@@ -1411,7 +1411,9 @@ button:not(.btn) {
 }
 
 .control-section:hover {
-    animation: fadeIn var(--transition-base);
+    background-color: var(--gray-50);
+    transform: translateY(-1px);
+    transition: all var(--transition-base);
 }
 
 /* ===== LOADING STATES ===== */
@@ -1620,23 +1622,6 @@ input:focus,
     .btn-primary {
         background: var(--primary-600);
         border: 2px solid white;
-    }
-}
-
-/* ===== DARK MODE SUPPORT ===== */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --gray-50: #111827;
-        --gray-100: #1f2937;
-        --gray-200: #374151;
-        --gray-300: #4b5563;
-        --gray-800: #f9fafb;
-        --gray-900: #ffffff;
-    }
-    
-    body {
-        background: linear-gradient(135deg, var(--gray-900) 0%, var(--gray-800) 100%);
-        color: var(--gray-100);
     }
 }
 
