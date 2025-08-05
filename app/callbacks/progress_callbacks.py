@@ -53,11 +53,11 @@ class ProgressCallbacks(BaseCallback):
                 title = "Ready"
                 details = "No operation in progress"
             elif state["error"]:
-                title = "❌ Error"
+                title = "Error"
                 details = state["message"]
             else:
                 # Format ETA with icon
-                title = f"⚡ {state['message']}"
+                title = f"{state['message']}"
                 
                 # Build details with item counts and ETA
                 details_parts = [f"{state['value']}% complete"]

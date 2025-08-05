@@ -52,12 +52,12 @@ class MapCallbacks(BaseCallback):
                 if conversion_result:
                     if conversion_result.get("converted"):
                         network_status = html.Div([
-                            html.P("🔄 Network converted from GraphML to GeoJSON", className="success-message"),
+                            html.P("Network converted from GraphML to GeoJSON", className="success-message"),
                             html.P(f"Features: {conversion_result.get('total_features', 0)}", className="info-message")
                         ])
                     elif conversion_result.get("error"):
                         network_status = html.Div(
-                            f"❌ Network conversion error: {conversion_result.get('message')}", 
+                            f"Network conversion error: {conversion_result.get('message')}", 
                             className="error-message"
                         )
             
@@ -67,12 +67,12 @@ class MapCallbacks(BaseCallback):
                 if conversion_result:
                     if conversion_result.get("converted"):
                         network_status = html.Div([
-                            html.P("🔄 Filtered Network converted from GraphML to GeoJSON", className="success-message"),
+                            html.P("Filtered Network converted from GraphML to GeoJSON", className="success-message"),
                             html.P(f"Features: {conversion_result.get('total_features', 0)}", className="info-message")
                         ])
                     elif conversion_result.get("error"):
                         network_status = html.Div(
-                            f"❌ Filtered Network conversion error: {conversion_result.get('message')}", 
+                            f"Filtered Network conversion error: {conversion_result.get('message')}", 
                             className="error-message"
                         )
             

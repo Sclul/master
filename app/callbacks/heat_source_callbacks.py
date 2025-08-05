@@ -62,7 +62,7 @@ class HeatSourceCallbacks(BaseCallback):
                 
                 if result.get("status") == "success":
                     status_msg = html.Div([
-                        html.P(f"✅ {result['message']}", className="success-message"),
+                        html.P(f"{result['message']}", className="success-message"),
                         html.P(f"Location: {lat:.4f}, {lng:.4f}", className="info-message"),
                         html.P(f"Production: {production} kW/year", className="info-message")
                     ])
@@ -77,12 +77,12 @@ class HeatSourceCallbacks(BaseCallback):
                     
                     return status_msg, summary_msg, {"updated": True, "timestamp": result.get("heat_source_id")}
                 else:
-                    error_msg = html.Div(f"❌ {result.get('message', 'Unknown error')}", className="error-message")
+                    error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
                     return error_msg, no_update, no_update
                     
             except Exception as e:
                 logger.error(f"Error handling map click for heat source: {e}")
-                error_msg = html.Div(f"❌ Error adding heat source: {str(e)}", className="error-message")
+                error_msg = html.Div(f"Error adding heat source: {str(e)}", className="error-message")
                 return error_msg, no_update, no_update
         
         @self.app.callback(
@@ -98,7 +98,7 @@ class HeatSourceCallbacks(BaseCallback):
             self._heat_source_mode = True
             logger.info("Heat source placement mode activated")
             
-            return html.Div("🎯 Click on the map to place a heat source", className="info-message")
+            return html.Div("Click on the map to place a heat source", className="info-message")
         
         @self.app.callback(
             [
@@ -119,7 +119,7 @@ class HeatSourceCallbacks(BaseCallback):
                 result = self.heat_source_handler.clear_all_heat_sources()
                 
                 if result.get("status") == "success":
-                    status_msg = html.Div(f"✅ {result['message']}", className="success-message")
+                    status_msg = html.Div(f"{result['message']}", className="success-message")
                     summary_msg = html.Div("No heat sources", className="info-message")
                     
                     # Reset heat source mode
@@ -127,12 +127,12 @@ class HeatSourceCallbacks(BaseCallback):
                     
                     return status_msg, summary_msg, {"cleared": True, "timestamp": n_clicks}
                 else:
-                    error_msg = html.Div(f"❌ {result.get('message', 'Unknown error')}", className="error-message")
+                    error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
                     return error_msg, no_update, no_update
                     
             except Exception as e:
                 logger.error(f"Error clearing heat sources: {e}")
-                error_msg = html.Div(f"❌ Error clearing heat sources: {str(e)}", className="error-message")
+                error_msg = html.Div(f"Error clearing heat sources: {str(e)}", className="error-message")
                 return error_msg, no_update, no_update
         
         @self.app.callback(
@@ -160,8 +160,8 @@ class HeatSourceCallbacks(BaseCallback):
                             html.P(f"Total Production: {total_production:.0f} kW/year", className="info-message")
                         ])
                 else:
-                    return html.Div(f"❌ {summary.get('message', 'Error getting summary')}", className="error-message")
+                    return html.Div(f"{summary.get('message', 'Error getting summary')}", className="error-message")
                     
             except Exception as e:
                 logger.error(f"Error updating heat source summary: {e}")
-                return html.Div(f"❌ Error: {str(e)}", className="error-message")
+                return html.Div(f"Error: {str(e)}", className="error-message")

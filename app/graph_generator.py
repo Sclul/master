@@ -627,7 +627,7 @@ class GraphGenerator:
             components = list(nx.connected_components(G))
             logger.info(f"Network has {len(components)} connected components")
             if len(components) == 1:
-                logger.info("✅ Successfully created single connected network!")
+                logger.info("Successfully created single connected network!")
             else:
                 largest_component = max(components, key=len)
                 logger.info(f"Largest component: {len(largest_component)} nodes")

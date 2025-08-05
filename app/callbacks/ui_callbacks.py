@@ -32,12 +32,12 @@ class UICallbacks(BaseCallback):
                     return ""  # No success message
                 elif filter_data.get("status") == "error":
                     return html.Div(
-                        f"❌ Filter error: {filter_data.get('message')}", 
+                        f"Filter error: {filter_data.get('message')}", 
                         className="error-message"
                     )
                 elif filter_data.get("status") == "empty":
                     return html.Div(
-                        "⚠️ No buildings match the current filters", 
+                        "No buildings match the current filters", 
                         className="warning-message"
                     )
             
