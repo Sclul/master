@@ -224,9 +224,14 @@ def create_control_panel(config=None):
 def create_status_panel():
     """Create a clean status panel."""
     return html.Div([
-        html.H3("Status"),
-        
-        # Status panel is now just for future status content
-        # Progress bar and data summary moved to left sidebar
-        
+        html.H3("Pandapipes Simulation"),
+
+        # Minimal controls for initialization only
+        html.Div([
+            html.Button("Initialize Net", id="sim-init-btn", className="btn btn-primary")
+        ], className="button-group"),
+
+        # Status + summary placeholders
+        html.Div(id="sim-status", className="status-display"),
+        html.Div(id="sim-summary", className="summary-display"),
     ], className="status-panel")

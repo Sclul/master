@@ -41,6 +41,10 @@ def create_layout(config=None):
             dcc.Store(id="filter-options-store"),
             dcc.Store(id="network-data"),
             dcc.Store(id="heat-sources-data"),
+            # Simulation state (UI-only scaffolding)
+            dcc.Store(id="sim-params-store"),
+            dcc.Store(id="sim-results-store"),
+            dcc.Store(id="sim-run-state-store"),
             # Progress tracking
             dcc.Store(id="progress-store", data={"active": False, "value": 0, "message": "", "error": False}),
             dcc.Interval(

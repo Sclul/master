@@ -80,4 +80,48 @@ graph_filters:
       # No specific parameters needed
       
 
-      
+# Pandapipes conversion defaults
+pandapipes:
+  enabled: true
+
+  # Hydraulics and modeling assumptions
+  hydraulics: "2-pipe"            # Documentation marker; modeling uses ΔT method
+  source_model: "mass_flow"       # "mass_flow" | "ext_grid" (fixed pressure)
+
+  # Fluid and temperatures
+  fluid: "water"                  # pandapipes built-in fluid
+  supply_temperature_C: 80.0
+  return_temperature_C: 50.0
+  delta_T_K: 30.0                  # used to convert P to m_dot if only P is known
+  cp_J_per_kgK: 4180.0             # specific heat capacity of water
+  rho_kg_per_m3: 985.0             # density at ~65°C
+
+  # Pressure / velocity targets (for later sizing)
+  min_junction_pressure_bar: 1.5
+  source_pressure_bar: 5.0         # only used if source_model == ext_grid
+  target_velocity_m_per_s: 1.5
+  max_velocity_m_per_s: 2.5
+  roughness_m: 1.0e-4              # steel default
+  default_pipe_diameter_m: 0.10    # initial uniform diameter
+  available_diameters_m: [0.032, 0.040, 0.050, 0.065, 0.080, 0.100, 0.125, 0.150, 0.200, 0.250]
+
+  # Demand/source interpretation
+  building_heat_demand_unit: "kWh_per_year"
+  heat_source_capacity_unit: "kWh_per_year"
+  demand_scaling_factor: 1.0
+  assume_continuous_operation_h_per_year: 2000  # for annual -> kW conversion
+
+  # Multi-source handling
+  multi_source_split: "by_capacity"  # "by_capacity" | "equal"
+
+  # Edge mapping
+  edge_types_as_pipes: ["street_segment", "building_connection", "heat_source_connection"]
+
+  # IO (converter will respect these)
+  output_paths:
+    pandapipes_net_json_path: "./data/pandapipes/network.json"
+    pandapipes_dump_dir: "./data/pandapipes/"
+  # Export policy: JSON-only via native pandapipes exporter
+
+
+

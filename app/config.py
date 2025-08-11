@@ -73,6 +73,34 @@ class Config:
                 "all_building_connections": {},
                 "steiner_tree": {}
             }
+        },
+        "pandapipes": {
+            "enabled": True,
+            "hydraulics": "2-pipe",
+            "source_model": "mass_flow",
+            "fluid": "water",
+            "supply_temperature_C": 80.0,
+            "return_temperature_C": 50.0,
+            "delta_T_K": 30.0,
+            "cp_J_per_kgK": 4180.0,
+            "rho_kg_per_m3": 985.0,
+            "min_junction_pressure_bar": 1.5,
+            "source_pressure_bar": 5.0,
+            "target_velocity_m_per_s": 1.5,
+            "max_velocity_m_per_s": 2.5,
+            "roughness_m": 1.0e-4,
+            "default_pipe_diameter_m": 0.10,
+            "available_diameters_m": [0.032, 0.040, 0.050, 0.065, 0.080, 0.100, 0.125, 0.150, 0.200, 0.250],
+            "building_heat_demand_unit": "kWh_per_year",
+            "heat_source_capacity_unit": "kWh_per_year",
+            "demand_scaling_factor": 1.0,
+            "assume_continuous_operation_h_per_year": 2000,
+            "multi_source_split": "by_capacity",
+            "edge_types_as_pipes": ["street_segment", "building_connection", "heat_source_connection"],
+            "output_paths": {
+                "pandapipes_net_json_path": "./data/pandapipes/network.json",
+                "pandapipes_dump_dir": "./data/pandapipes/"
+            }
         }
     }
     
@@ -202,3 +230,8 @@ class Config:
                 "all_building_connections": {}
             }
         })
+
+    @property
+    def pandapipes(self) -> Dict[str, Any]:
+        """Get pandapipes conversion defaults."""
+        return self.config.get("pandapipes", self.DEFAULT_CONFIG.get("pandapipes", {}))
