@@ -228,10 +228,11 @@ def create_status_panel():
 
         # Minimal controls for initialization only
         html.Div([
-            html.Button("Initialize Net", id="sim-init-btn", className="btn btn-primary")
+            html.Button("Initialize Net", id="sim-init-btn", className="btn btn-secondary"),
+            html.Button("Run Pipeflow", id="sim-run-btn", className="btn btn-primary")
         ], className="button-group"),
 
         # Status + summary placeholders
         html.Div(id="sim-status", className="status-display"),
-        html.Div(id="sim-summary", className="summary-display"),
+        html.Div(id="sim-summary", className="status-display"),
     ], className="status-panel")

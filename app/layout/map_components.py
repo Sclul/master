@@ -70,6 +70,7 @@ def create_map_component(config=None):
                     {"label": "Network", "value": "network"},
                     {"label": "Filtered Network", "value": "filtered_network"},
                     {"label": "Heat Sources", "value": "heat_sources"},
+                    {"label": "Pressure", "value": "pressure"},
                 ],
                 value=[],
                 className="map-layer-controls"

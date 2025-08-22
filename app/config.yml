@@ -1,22 +1,12 @@
-# config.yml
-# Configuration for the OSMnx Dash Application
-
-# Settings for osmnx library functions
 osmnx_settings:
-  # Tolerance for consolidating intersections (in meters).
-  # Nodes within this distance of each other will be merged.
-  # Larger values simplify complex interchanges more aggressively.
   consolidation_tolerance: 15
-  # Network type to fetch (e.g., 'drive', 'walk', 'bike', 'all_private', 'all')
   network_type: "drive"
 
-# Server settings for the Dash application
 server_settings:
   host: "0.0.0.0"
   port: 8050
-  debug: True # Set to False in production
+  debug: true
 
-# Paths for data files
 data_paths:
   data_dir: "./data"
   polygon_path: "./data/polygon.geojson"
@@ -29,21 +19,18 @@ data_paths:
   filtered_network_path: "./data/filtered_heating_network.geojson"
   heat_sources_path: "./data/heat_sources.geojson"
 
-# Heat demand configuration
 heat_demand:
-  gdb_path: "/gdb/GDB.gdb"  # Path to GeoDatabase file
-  gdb_layer: "Raumwaermebedarf_ist"  # Layer name in GDB containing heat demand data
-  heat_demand_column: "RW"  # Column name for heat demand values
+  gdb_path: "/gdb/GDB.gdb"
+  gdb_layer: "Raumwaermebedarf_ist"
+  heat_demand_column: "RW"
 
-# Coordinate Reference System
 coordinate_system:
-  target_crs: "EPSG:5243"  # ETRS89 / LCC Germany (for calculations)
-  input_crs: "EPSG:4326"   # WGS84 (for OSM data input)
+  target_crs: "EPSG:5243"
+  input_crs: "EPSG:4326"
 
-# Map display settings
 map_settings:
-  default_center: [50.9413, 6.9572]  # Cologne, Germany
-  default_zoom: 15                   # Default zoom level
+  default_center: [50.9413, 6.9572]
+  default_zoom: 15
   tile_url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
   attribution: "© OpenStreetMap contributors"
   measure_settings:
@@ -53,75 +40,64 @@ map_settings:
     active_color: "blue"
     completed_color: "rgba(0, 0, 255, 0.6)"
 
-# Building filter configuration
 building_filters:
-  exclude_zero_heat_demand: true  # Remove buildings with zero/null heat demand
-  min_heat_demand: ""  # Minimum heat demand threshold (excludes 0.0 values)
-  max_heat_demand: "" # Maximum heat demand threshold
-  postcodes: [""]  # Include only these postcodes (empty = all postcodes)
-  cities: [""]     # Include only these cities (empty = all cities) 
-  building_uses: [""] # Include only these building uses (empty = all uses)
+  exclude_zero_heat_demand: true
+  min_heat_demand: ""
+  max_heat_demand: ""
+  postcodes: [""]
+  cities: [""]
+  building_uses: [""]
 
-# Building clustering configuration
 building_clustering:
-  auto_apply: true   # Automatically apply clustering when processing buildings
+  auto_apply: true
 
-# Graph filtering and optimization settings
 graph_filters:
-  max_building_connection_distance: 20.0  # meters
+  max_building_connection_distance: 20.0
   default_pruning_algorithm: "minimum_spanning_tree"
-  
   pruning_algorithms:
     minimum_spanning_tree:
-      
     all_building_connections:
-      # No specific parameters needed
     steiner_tree:
-      # No specific parameters needed
-      
 
-# Pandapipes conversion defaults
 pandapipes:
   enabled: true
-
-  # Hydraulics and modeling assumptions
-  hydraulics: "2-pipe"            # Documentation marker; modeling uses ΔT method
-  source_model: "mass_flow"       # "mass_flow" | "ext_grid" (fixed pressure)
-
-  # Fluid and temperatures
-  fluid: "water"                  # pandapipes built-in fluid
-  supply_temperature_C: 80.0
+  hydraulics: "2-pipe"
+  source_model: "ext_grid"
+  fluid: "water"
+  supply_temperature_C: 130.0
   return_temperature_C: 50.0
-  delta_T_K: 30.0                  # used to convert P to m_dot if only P is known
-  cp_J_per_kgK: 4180.0             # specific heat capacity of water
-  rho_kg_per_m3: 985.0             # density at ~65°C
-
-  # Pressure / velocity targets (for later sizing)
+  delta_T_K: 30.0
+  cp_J_per_kgK: 4180.0
+  rho_kg_per_m3: 985.0
   min_junction_pressure_bar: 1.5
-  source_pressure_bar: 5.0         # only used if source_model == ext_grid
+  source_pressure_bar: 20.0
+  ext_grid_temperature_C: 130.0
+  use_per_source_pressures: true
+  use_per_source_temperatures: true
   target_velocity_m_per_s: 1.5
   max_velocity_m_per_s: 2.5
-  roughness_m: 1.0e-4              # steel default
-  default_pipe_diameter_m: 0.10    # initial uniform diameter
+  roughness_m: 1.0e-4
+  default_pipe_diameter_m: 0.20
   available_diameters_m: [0.032, 0.040, 0.050, 0.065, 0.080, 0.100, 0.125, 0.150, 0.200, 0.250]
-
-  # Demand/source interpretation
   building_heat_demand_unit: "kWh_per_year"
   heat_source_capacity_unit: "kWh_per_year"
   demand_scaling_factor: 1.0
-  assume_continuous_operation_h_per_year: 2000  # for annual -> kW conversion
-
-  # Multi-source handling
-  multi_source_split: "by_capacity"  # "by_capacity" | "equal"
-
-  # Edge mapping
+  assume_continuous_operation_h_per_year: 2000
+  multi_source_split: "by_capacity"
   edge_types_as_pipes: ["street_segment", "building_connection", "heat_source_connection"]
-
-  # IO (converter will respect these)
   output_paths:
     pandapipes_net_json_path: "./data/pandapipes/network.json"
     pandapipes_dump_dir: "./data/pandapipes/"
-  # Export policy: JSON-only via native pandapipes exporter
+    pipe_results_geojson: "./data/pandapipes/pipe_results.geojson"
+    junction_results_csv: "./data/pandapipes/junction_results.csv"
+    pipe_results_csv: "./data/pandapipes/pipe_results.csv"
+  run_after_build: false
+  pipeflow:
+    enabled: true
+    friction_model: "swamee_jain"
+    mode: "all"
+    tol: 1.0e-6
+    max_iter: 100
 
 
 

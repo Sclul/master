@@ -23,15 +23,15 @@ class Config:
             "debug": True,
         },
         "data_paths": {
-            "data_dir": "../data",
-            "polygon_path": "../data/polygon.geojson",
-            "streets_path": "../data/streets.geojson",
-            "buildings_path": "../data/buildings.geojson",
-            "filtered_buildings_path": "../data/filtered_buildings.geojson",
-            "network_path": "../data/heating_network.geojson",
-            "network_graphml_path": "../data/heating_network.graphml",
-            "filtered_network_graphml_path": "../data/filtered_heating_network.graphml",
-            "filtered_network_path": "../data/filtered_heating_network.geojson",
+            "data_dir": "./data",
+            "polygon_path": "./data/polygon.geojson",
+            "streets_path": "./data/streets.geojson",
+            "buildings_path": "./data/buildings.geojson",
+            "filtered_buildings_path": "./data/filtered_buildings.geojson",
+            "network_path": "./data/heating_network.geojson",
+            "network_graphml_path": "./data/heating_network.graphml",
+            "filtered_network_graphml_path": "./data/filtered_heating_network.graphml",
+            "filtered_network_path": "./data/filtered_heating_network.geojson",
             "heat_sources_path": "./data/heat_sources.geojson",
         },
         "heat_demand": {
@@ -58,6 +58,8 @@ class Config:
         },
         "building_filters": {
             "exclude_zero_heat_demand": True,
+            "min_heat_demand": "",
+            "max_heat_demand": "",
             "postcodes": [""],
             "cities": [""],
             "building_uses": [""]
@@ -77,19 +79,22 @@ class Config:
         "pandapipes": {
             "enabled": True,
             "hydraulics": "2-pipe",
-            "source_model": "mass_flow",
+            "source_model": "ext_grid",
             "fluid": "water",
-            "supply_temperature_C": 80.0,
+            "supply_temperature_C": 130.0,
             "return_temperature_C": 50.0,
             "delta_T_K": 30.0,
             "cp_J_per_kgK": 4180.0,
             "rho_kg_per_m3": 985.0,
             "min_junction_pressure_bar": 1.5,
-            "source_pressure_bar": 5.0,
+            "source_pressure_bar": 20.0,
+            "ext_grid_temperature_C": 130.0,
+            "use_per_source_pressures": True,
+            "use_per_source_temperatures": True,
             "target_velocity_m_per_s": 1.5,
             "max_velocity_m_per_s": 2.5,
             "roughness_m": 1.0e-4,
-            "default_pipe_diameter_m": 0.10,
+            "default_pipe_diameter_m": 0.20,
             "available_diameters_m": [0.032, 0.040, 0.050, 0.065, 0.080, 0.100, 0.125, 0.150, 0.200, 0.250],
             "building_heat_demand_unit": "kWh_per_year",
             "heat_source_capacity_unit": "kWh_per_year",
@@ -97,9 +102,20 @@ class Config:
             "assume_continuous_operation_h_per_year": 2000,
             "multi_source_split": "by_capacity",
             "edge_types_as_pipes": ["street_segment", "building_connection", "heat_source_connection"],
+            "run_after_build": False,
+            "pipeflow": {
+                "enabled": True,
+                "friction_model": "swamee_jain",
+                "mode": "all",
+                "tol": 1e-6,
+                "max_iter": 100
+            },
             "output_paths": {
                 "pandapipes_net_json_path": "./data/pandapipes/network.json",
-                "pandapipes_dump_dir": "./data/pandapipes/"
+                "pandapipes_dump_dir": "./data/pandapipes/",
+                "pipe_results_geojson": "./data/pandapipes/pipe_results.geojson",
+                "junction_results_csv": "./data/pandapipes/junction_results.csv",
+                "pipe_results_csv": "./data/pandapipes/pipe_results.csv"
             }
         }
     }

@@ -41,6 +41,7 @@ class MapCallbacks(BaseCallback):
             show_network = "network" in selected_layers
             show_filtered_network = "filtered_network" in selected_layers
             show_heat_sources = "heat_sources" in selected_layers
+            show_pressure = "pressure" in selected_layers
             
             logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}, network={show_network}, filtered_network={show_filtered_network}")
             
@@ -76,7 +77,7 @@ class MapCallbacks(BaseCallback):
                             className="error-message"
                         )
             
-            layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network, show_filtered_network, show_heat_sources)
+            layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network, show_filtered_network, show_heat_sources, show_pressure)
             return layers, network_status
 
         @self.app.callback(
@@ -181,7 +182,7 @@ class MapCallbacks(BaseCallback):
             """Display current zoom level."""
             return f"Zoom: {zoom}" if zoom else "Zoom: Unknown"
     
-    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False, show_filtered_network=False, show_heat_sources=False):
+    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False, show_filtered_network=False, show_heat_sources=False, show_pressure=False):
         """Build only the data layers (not base map components)."""
         layers = []
         
@@ -220,6 +221,11 @@ class MapCallbacks(BaseCallback):
             if heat_sources_layer is not None:
                 layers.append(heat_sources_layer)
                 logger.info("Added heat sources layer to map")
+        if show_pressure:
+            pressure_layer = self._create_pressure_layer()
+            if pressure_layer is not None:
+                layers.append(pressure_layer)
+                logger.info("Added pressure layer to map")
         
         logger.info(f"Total data layers built: {len(layers)}")
         return layers
@@ -328,6 +334,82 @@ class MapCallbacks(BaseCallback):
             "heat-sources-layer",
             {"color": "orange", "fillColor": "orange", "radius": 8, "weight": 2, "fillOpacity": 0.8}
         )
+
+    def _create_pressure_layer(self):
+        """Create a pipe pressure visualization layer using per-pipe Polylines.
+
+        Avoids passing Python functions (not JSON serializable) by precomputing
+        colors client-side. Adds a LayerGroup with colored polylines. Each
+        polyline includes a title attribute (Leaflet tooltip on hover) with
+        pressure details.
+        """
+        try:
+            pipe_results_path = "./data/pandapipes/pipe_results.geojson"
+            if not Path(pipe_results_path).exists():
+                logger.debug("Pressure layer skipped: pipe_results.geojson not found")
+                return None
+            gdf = gpd.read_file(pipe_results_path)
+            if gdf.empty or "p_avg_bar" not in gdf.columns:
+                logger.debug("Pressure layer skipped: missing p_avg_bar")
+                return None
+            if gdf.crs and str(gdf.crs) != "EPSG:4326":
+                gdf = gdf.to_crs("EPSG:4326")
+
+            p_min = float(gdf["p_avg_bar"].min())
+            p_max = float(gdf["p_avg_bar"].max())
+            span = (p_max - p_min) if p_max > p_min else 1.0
+
+            def color_for(p):
+                try:
+                    norm = (float(p) - p_min) / span
+                except Exception:
+                    norm = 0.0
+                norm = max(0.0, min(1.0, norm))
+                r = int(255 * norm)
+                b = int(255 * (1 - norm))
+                g = 30
+                return f"rgb({r},{g},{b})"
+
+            polylines = []
+            for idx, row in gdf.iterrows():
+                geom = row["geometry"]
+                if geom is None:
+                    continue
+                try:
+                    coords = list(geom.coords)
+                except Exception:
+                    continue
+                # Leaflet expects (lat, lon)
+                positions = [(y, x) for x, y in coords]
+                p_avg = row.get("p_avg_bar")
+                def _fmt(val):
+                    return f"{val:.3f}" if isinstance(val, (int, float)) else "?"
+                p_from_val = row.get('p_from_bar')
+                p_to_val = row.get('p_to_bar')
+                if isinstance(p_avg, (int, float)):
+                    tooltip_text = (
+                        f"p_avg={_fmt(p_avg)} bar\n"
+                        f"p_from={_fmt(p_from_val)} bar, p_to={_fmt(p_to_val)} bar"
+                    )
+                else:
+                    tooltip_text = "p_avg=?"
+                polylines.append(dl.Polyline(
+                    id=f"pressure-poly-{idx}",
+                    positions=positions,
+                    color=color_for(p_avg),
+                    weight=4,
+                    opacity=0.85,
+                    children=[dl.Tooltip(tooltip_text)]
+                ))
+
+            if not polylines:
+                logger.debug("Pressure layer skipped: no valid polylines generated")
+                return None
+            logger.info(f"Pressure layer created with {len(polylines)} polylines (p_min={p_min:.3f}, p_max={p_max:.3f} bar)")
+            return dl.LayerGroup(id="pressure-layer", children=polylines)
+        except Exception as e:
+            logger.error(f"Error creating pressure layer: {e}")
+            return None
     
     def _ensure_network_geojson_exists(self):
         """Ensure network GeoJSON file exists by converting from GraphML if needed."""

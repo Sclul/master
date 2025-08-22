@@ -64,12 +64,13 @@ class HeatSourceCallbacks(BaseCallback):
                     status_msg = html.Div([
                         html.P(f"{result['message']}", className="success-message"),
                         html.P(f"Location: {lat:.4f}, {lng:.4f}", className="info-message"),
-                        html.P(f"Production: {production} kW/year", className="info-message")
+                        # FIX: unit label
+                        html.P(f"Production: {production} kWh/year", className="info-message")
                     ])
                     
                     summary_msg = html.Div([
                         html.P(f"Total Sources: {summary.get('total_count', 0)}", className="info-message"),
-                        html.P(f"Total Production: {summary.get('total_production', 0):.0f} kW/year", className="info-message")
+                        html.P(f"Total Production: {summary.get('total_production', 0):.0f} kWh/year", className="info-message")
                     ])
                     
                     # Reset heat source mode after successful placement
@@ -156,8 +157,10 @@ class HeatSourceCallbacks(BaseCallback):
                         return html.Div("No heat sources", className="info-message")
                     else:
                         return html.Div([
-                            html.P(f"Total Sources: {total_count}", className="info-message"),
-                            html.P(f"Total Production: {total_production:.0f} kW/year", className="info-message")
+                            html.H4("Heat Source Summary", className="summary-title"),
+                            html.P(f"Total Sources: {summary.get('count', 0)}", className="info-message"),
+                            # FIX: unit label
+                            html.P(f"Total Production: {total_production:.0f} kWh/year", className="info-message")
                         ])
                 else:
                     return html.Div(f"{summary.get('message', 'Error getting summary')}", className="error-message")

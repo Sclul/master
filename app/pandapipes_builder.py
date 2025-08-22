@@ -169,12 +169,14 @@ class PandapipesBuilder:
                 sinks.append(s_idx)
                 total_sink_mdot += mdot
 
-        # Create sources at heat_source nodes, split by capacity share
+        # Create supply components at heat_source nodes
         unit_source = self.pp_cfg.get("heat_source_capacity_unit", "kWh_per_year")
         split_mode = self.pp_cfg.get("multi_source_split", "by_capacity")
+        source_model = str(self.pp_cfg.get("source_model", "mass_flow")).lower()
 
         sources: List[int] = []
-        # Gather capacities
+        ext_grids: List[int] = []
+        # Gather capacities (used for mass_flow mode to split source mdot)
         hs_list: List[Tuple[Any, float]] = []  # (node_id, mdot_kg_per_s_capacity)
         total_hs_capacity_mdot = 0.0
         for n, data in G.nodes(data=True):
@@ -193,18 +195,48 @@ class PandapipesBuilder:
             total_hs_capacity_mdot += mdot_cap
 
         if total_sink_mdot > 0 and hs_list:
-            if split_mode == "equal" or total_hs_capacity_mdot <= 0:
-                share = total_sink_mdot / len(hs_list)
+            if source_model == "ext_grid":
+                # Pressure-based model: create one ext_grid per heat source junction
+                default_p_bar = float(self.pp_cfg.get("source_pressure_bar", 5.0))
+                default_t_c = float(self.pp_cfg.get("ext_grid_temperature_C", t_supply_c))
+                use_src_p = bool(self.pp_cfg.get("use_per_source_pressures", True))
+                use_src_t = bool(self.pp_cfg.get("use_per_source_temperatures", True))
                 for n, _ in hs_list:
-                    src = pp.create_source(net, junction=node_to_junc[n], mdot_kg_per_s=share, name=f"source_{n}")
-                    sources.append(src)
+                    data = G.nodes[n]
+                    p_bar_src = default_p_bar
+                    t_c_src = default_t_c
+                    if use_src_p:
+                        try:
+                            p_bar_src = float(data.get("heat_source_pressure_bar", p_bar_src) or p_bar_src)
+                        except (TypeError, ValueError):
+                            pass
+                    if use_src_t:
+                        try:
+                            t_c_src = float(data.get("heat_source_temperature_C", t_c_src) or t_c_src)
+                        except (TypeError, ValueError):
+                            pass
+                    eg = pp.create_ext_grid(
+                        net,
+                        junction=node_to_junc[n],
+                        p_bar=p_bar_src,
+                        t_k=t_c_src + 273.15,
+                        name=f"ext_grid_{n}",
+                    )
+                    ext_grids.append(eg)
             else:
-                # Proportional to capacity
-                for n, mdot_cap in hs_list:
-                    frac = (mdot_cap / total_hs_capacity_mdot) if total_hs_capacity_mdot > 0 else 0.0
-                    mdot_src = frac * total_sink_mdot
-                    src = pp.create_source(net, junction=node_to_junc[n], mdot_kg_per_s=mdot_src, name=f"source_{n}")
-                    sources.append(src)
+                # Mass-flow model: create sources and split mdot across heat sources
+                if split_mode == "equal" or total_hs_capacity_mdot <= 0:
+                    share = total_sink_mdot / len(hs_list)
+                    for n, _ in hs_list:
+                        src = pp.create_source(net, junction=node_to_junc[n], mdot_kg_per_s=share, name=f"source_{n}")
+                        sources.append(src)
+                else:
+                    # Proportional to capacity
+                    for n, mdot_cap in hs_list:
+                        frac = (mdot_cap / total_hs_capacity_mdot) if total_hs_capacity_mdot > 0 else 0.0
+                        mdot_src = frac * total_sink_mdot
+                        src = pp.create_source(net, junction=node_to_junc[n], mdot_kg_per_s=mdot_src, name=f"source_{n}")
+                        sources.append(src)
 
         # Optional: write to JSON
         out_paths = self.pp_cfg.get("output_paths", {})
@@ -225,12 +257,232 @@ class PandapipesBuilder:
             "pipes": int(pipe_count),
             "sinks": int(len(sinks)),
             "sources": int(len(sources)),
+            "ext_grids": int(len(ext_grids)),
             "total_sink_mdot_kg_per_s": float(total_sink_mdot),
             "graphml": graphml,
             "json_path": json_path,
         }
         logger.info(f"Pandapipes network built: {summary}")
         return summary
+
+    # ------------- Simulation API -------------
+    def run_pipeflow(self, net: Any | None = None, json_path: str | None = None) -> Dict[str, Any]:
+        """Run pandapipes pipeflow on a built net and export results.
+
+        If net is None, it will be loaded from JSON using the configured path.
+        Returns a small summary dict with key metrics and output file paths.
+        """
+        if pp is None:
+            raise RuntimeError("pandapipes is not installed or failed to import")
+
+        # Resolve net
+        if net is None:
+            out_paths = self.pp_cfg.get("output_paths", {})
+            json_path = json_path or out_paths.get("pandapipes_net_json_path", "./data/pandapipes/network.json")
+            if not Path(json_path).exists():
+                raise FileNotFoundError(f"pandapipes net JSON not found at {json_path}")
+            logger.info(f"Loading pandapipes net from {json_path}")
+            net = pp.from_json(json_path)
+
+        # Pipeflow options - Fixed to only use swamee_jain as requested
+        pf_cfg = self.pp_cfg.get("pipeflow", {})
+        friction_model = "swamee_jain"  # Fixed to swamee_jain only
+        mode = pf_cfg.get("mode", "all")
+        tol = pf_cfg.get("tol", 1e-6)
+        max_iter = pf_cfg.get("max_iter", 100)
+        allow_fallback = False  # Disabled fallback to ensure only swamee_jain is used
+        fallback_models = []  # No fallback models
+
+        logger.info(f"Using friction_model={friction_model} (fixed), mode={mode}, tol={tol}, max_iter={max_iter}")
+        logger.info(
+            f"Running pandapipes.pipeflow with friction_model=swamee_jain, mode={mode}, tol={tol}, max_iter={max_iter}"
+        )
+
+        pipeflow_errors: list[str] = []
+        run_success = False
+
+        def _run(primary: bool, fm: str):
+            """Internal helper attempting pipeflow with signature variations."""
+            try:
+                try:
+                    # Try with max_iter_hyd parameter first
+                    pp.pipeflow(
+                        net,
+                        friction_model=fm,
+                        mode=mode,
+                        tol=tol,
+                        max_iter_hyd=max_iter,
+                    )  # type: ignore[arg-type]
+                except TypeError:
+                    try:
+                        # Try with older max_iter parameter
+                        pp.pipeflow(
+                            net,
+                            friction_model=fm,
+                            mode=mode,
+                            tol=tol,
+                            max_iter=max_iter,
+                        )  # type: ignore[arg-type]
+                    except TypeError:
+                        # Bare minimum
+                        pp.pipeflow(net)
+                return True, fm
+            except Exception as e:  # noqa: BLE001
+                tag = "primary" if primary else "fallback"
+                logger.warning(f"Pipeflow {tag} attempt with model={fm} failed: {e}")
+                pipeflow_errors.append(f"{tag}:{fm}:{e}")
+                return False, fm
+
+        # Primary attempt
+        run_success, friction_model_used = _run(primary=True, fm=friction_model)
+
+        # Fallbacks if requested and primary failed
+        if not run_success and allow_fallback:
+            for fm in fallback_models:
+                if fm == friction_model:
+                    continue
+                ok, _ = _run(primary=False, fm=fm)
+                if ok:
+                    friction_model_used = fm
+                    run_success = True
+                    logger.info(f"Pipeflow succeeded with fallback friction_model={fm}")
+                    break
+
+        if not run_success:
+            logger.error("All pipeflow attempts failed; aborting result export")
+            return {
+                "converged": False,
+                "errors": pipeflow_errors,
+                "friction_model_used": friction_model,
+            }
+
+        # Output paths
+        out_paths = self.pp_cfg.get("output_paths", {})
+        dump_dir = out_paths.get("pandapipes_dump_dir", "./data/pandapipes/")
+        Path(dump_dir).mkdir(parents=True, exist_ok=True)
+        j_csv = out_paths.get("junction_results_csv", "./data/pandapipes/junction_results.csv")
+        p_csv = out_paths.get("pipe_results_csv", "./data/pandapipes/pipe_results.csv")
+        p_geojson = out_paths.get("pipe_results_geojson", "./data/pandapipes/pipe_results.geojson")
+
+        # Write CSVs if available
+        try:
+            if hasattr(net, "res_junction"):
+                net.res_junction.to_csv(j_csv, index=True)
+            if hasattr(net, "res_pipe"):
+                net.res_pipe.to_csv(p_csv, index=True)
+        except Exception as e:
+            logger.warning(f"Could not export pipeflow CSV results: {e}")
+
+        # Optional GeoJSON export using geodata + res_pipe
+        try:
+            import geopandas as gpd  # type: ignore
+            from shapely.geometry import LineString  # type: ignore
+
+            if getattr(net, "junction_geodata", None) is None or net.junction_geodata.empty:
+                logger.warning("No junction geodata available; skipping result GeoJSON export")
+            else:
+                jgd = net.junction_geodata.copy()
+                jgd = jgd.rename_axis("junction").reset_index().set_index("junction")
+
+                def jcoord(idx: int):
+                    row = jgd.loc[idx]
+                    return float(row["x"]), float(row["y"])  # EPSG:5243 meters
+
+                pipes_df = net.pipe.copy()
+                try:
+                    pipes_df.index.name = "pipe"
+                except Exception:
+                    pass
+                pipes_df = pipes_df.reset_index()
+                if hasattr(net, "res_pipe") and not net.res_pipe.empty:
+                    res_pipe_df = net.res_pipe.copy()
+                    try:
+                        res_pipe_df.index.name = "pipe"
+                    except Exception:
+                        pass
+                    res_pipe_df = res_pipe_df.reset_index()
+                    pipes_df = pipes_df.merge(res_pipe_df, on="pipe", how="left")
+
+                # Map junction pressures for visualization (if available)
+                p_series = None
+                if hasattr(net, "res_junction") and not net.res_junction.empty and "p_bar" in net.res_junction.columns:
+                    p_series = net.res_junction["p_bar"]
+
+                p_from_vals = []
+                p_to_vals = []
+                p_avg_vals = []
+                geoms = []
+                for _, r in pipes_df.iterrows():
+                    try:
+                        fj = int(r["from_junction"])  # type: ignore[index]
+                        tj = int(r["to_junction"])    # type: ignore[index]
+                        x1, y1 = jcoord(fj)
+                        x2, y2 = jcoord(tj)
+                        geoms.append(LineString([(x1, y1), (x2, y2)]))
+                        if p_series is not None:
+                            p_f = float(p_series.get(fj, float("nan")))
+                            p_t = float(p_series.get(tj, float("nan")))
+                        else:
+                            p_f = p_t = float("nan")
+                        p_from_vals.append(p_f)
+                        p_to_vals.append(p_t)
+                        p_avg_vals.append((p_f + p_t) / 2.0 if (not math.isnan(p_f) and not math.isnan(p_t)) else float("nan"))
+                    except Exception:
+                        geoms.append(None)
+                        p_from_vals.append(float("nan"))
+                        p_to_vals.append(float("nan"))
+                        p_avg_vals.append(float("nan"))
+
+                pipes_df["p_from_bar"] = p_from_vals
+                pipes_df["p_to_bar"] = p_to_vals
+                pipes_df["p_avg_bar"] = p_avg_vals
+
+                gdf = gpd.GeoDataFrame(pipes_df, geometry=geoms, crs="EPSG:5243")
+                Path(p_geojson).parent.mkdir(parents=True, exist_ok=True)
+                gdf.to_file(p_geojson, driver="GeoJSON")
+        except Exception as e:
+            logger.warning(f"Could not export pipeflow GeoJSON: {e}")
+
+        # Summaries
+        def safe_float(val, default=float("nan")):
+            try:
+                return float(val)
+            except Exception:
+                return default
+
+        p_min = safe_float(getattr(net, "res_junction", {}).get("p_bar").min() if hasattr(net, "res_junction") and "p_bar" in net.res_junction else float("nan"))
+        p_max = safe_float(getattr(net, "res_junction", {}).get("p_bar").max() if hasattr(net, "res_junction") and "p_bar" in net.res_junction else float("nan"))
+        v_max = float("nan")
+        if hasattr(net, "res_pipe") and not net.res_pipe.empty:
+            if "v_mean_m_per_s" in net.res_pipe:
+                v_max = safe_float(net.res_pipe["v_mean_m_per_s"].max())
+            elif "v_m_per_s" in net.res_pipe:
+                v_max = safe_float(net.res_pipe["v_m_per_s"].max())
+
+        summary = {
+            "converged": True,
+            "p_min_bar": p_min,
+            "p_max_bar": p_max,
+            "v_max_m_per_s": v_max,
+            "junction_results_csv": j_csv,
+            "pipe_results_csv": p_csv,
+            "pipe_results_geojson": p_geojson,
+            "friction_model_used": friction_model_used,
+            "max_iter_hyd": max_iter,
+            "errors": pipeflow_errors if pipeflow_errors else None,
+        }
+        logger.info(f"Pipeflow summary: {summary}")
+        return summary
+
+    def build_and_run_from_graphml(self, graphml_path: str | None = None) -> Dict[str, Any]:
+        """Convenience: build network then run pipeflow and merge summaries."""
+        build = self.build_from_graphml(graphml_path)
+        try:
+            run = self.run_pipeflow(json_path=build.get("json_path"))
+        except Exception as e:
+            logger.error(f"Pipeflow failed after build: {e}")
+            run = {"converged": False, "error": str(e)}
+        return {**build, **{f"pipeflow_{k}": v for k, v in run.items()}}
 
 
 def build_default() -> Dict[str, Any]:

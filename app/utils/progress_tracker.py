@@ -21,7 +21,7 @@ class ProgressTracker:
             self.active = False
             self.value = 0
             self.message = ""
-            self.error = False
+            self.has_error = False
             self.start_time = None
             self.total_items = None  # New: total items to process
             self.processed_items = 0  # New: items processed so far
@@ -37,7 +37,7 @@ class ProgressTracker:
             self.active = True
             self.value = 0
             self.message = message
-            self.error = False
+            self.has_error = False
             self.start_time = time.time()
             self.total_items = total_items
             self.processed_items = 0
@@ -74,7 +74,7 @@ class ProgressTracker:
     def error(self, message: str):
         """Mark progress as failed."""
         with self._lock:
-            self.error = True
+            self.has_error = True
             self.message = f"Error: {message}"
             logger.error(f"Progress error: {message}")
     
@@ -93,7 +93,7 @@ class ProgressTracker:
                 "active": self.active,
                 "value": self.value,
                 "message": self.message,
-                "error": self.error,
+                "error": self.has_error,
                 "elapsed": elapsed,
                 "total_items": self.total_items,
                 "processed_items": self.processed_items,
