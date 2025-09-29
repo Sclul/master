@@ -61,6 +61,31 @@ class GeospatialHandler:
         except Exception as e:
             logger.error(f"Error clearing data directory: {e}")
             return {"status": "error", "message": str(e)}
+
+    def clear_pandapipes_directory(self) -> Dict[str, Any]:
+        """Clear all files inside the configured pandapipes dump directory (e.g. data/pandapipes).
+
+        This does NOT remove the directory itself, only its file contents. Subdirectories (if any)
+        are skipped for safety.
+        """
+        try:
+            dump_dir_cfg = self.config.pandapipes.get("output_paths", {}).get("pandapipes_dump_dir", "./data/pandapipes/")
+            dump_path = Path(dump_dir_cfg)
+            if dump_path.exists() and dump_path.is_dir():
+                removed = 0
+                for item in dump_path.iterdir():
+                    if item.is_file():
+                        item.unlink()
+                        removed += 1
+                        logger.debug(f"Removed pandapipes file: {item}")
+                logger.info(f"Pandapipes directory cleared ({removed} files): {dump_path}")
+                return {"status": "success", "message": f"Pandapipes directory {dump_path} cleared"}
+            else:
+                logger.info(f"Pandapipes directory does not exist: {dump_path}")
+                return {"status": "info", "message": f"Pandapipes directory {dump_path} does not exist"}
+        except Exception as e:
+            logger.error(f"Error clearing pandapipes directory: {e}")
+            return {"status": "error", "message": str(e)}
                
     
     def create_geojson_from_coordinates(self, coordinates: Union[Dict, List]) -> Dict[str, Any]:

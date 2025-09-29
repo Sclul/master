@@ -4,6 +4,7 @@ app/__pycache__/
 app/callbacks/__pycache__/
 app/layout/__pycache__/
 app/utils/__pycache__/
+.venv
 
 # Data files
 app/data/
