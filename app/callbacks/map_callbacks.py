@@ -41,7 +41,12 @@ class MapCallbacks(BaseCallback):
             show_network = "network" in selected_layers
             show_filtered_network = "filtered_network" in selected_layers
             show_heat_sources = "heat_sources" in selected_layers
-            show_pressure = "pressure" in selected_layers
+            show_supply_temp = "supply_temp" in selected_layers
+            show_supply_pressure = "supply_pressure" in selected_layers
+            show_supply_mass_flow = "supply_mass_flow" in selected_layers
+            show_return_temp = "return_temp" in selected_layers
+            show_return_pressure = "return_pressure" in selected_layers
+            show_return_mass_flow = "return_mass_flow" in selected_layers
             
             logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}, network={show_network}, filtered_network={show_filtered_network}")
             
@@ -77,7 +82,12 @@ class MapCallbacks(BaseCallback):
                             className="error-message"
                         )
             
-            layers = self._build_data_layers(show_streets, show_buildings, show_filtered, show_network, show_filtered_network, show_heat_sources, show_pressure)
+            layers = self._build_data_layers(
+                show_streets, show_buildings, show_filtered, show_network, show_filtered_network, 
+                show_heat_sources,
+                show_supply_temp, show_supply_pressure, show_supply_mass_flow,
+                show_return_temp, show_return_pressure, show_return_mass_flow
+            )
             return layers, network_status
 
         @self.app.callback(
@@ -182,7 +192,9 @@ class MapCallbacks(BaseCallback):
             """Display current zoom level."""
             return f"Zoom: {zoom}" if zoom else "Zoom: Unknown"
     
-    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False, show_filtered_network=False, show_heat_sources=False, show_pressure=False):
+    def _build_data_layers(self, show_streets, show_buildings, show_filtered, show_network=False, show_filtered_network=False, show_heat_sources=False,
+                          show_supply_temp=False, show_supply_pressure=False, show_supply_mass_flow=False,
+                          show_return_temp=False, show_return_pressure=False, show_return_mass_flow=False):
         """Build only the data layers (not base map components)."""
         layers = []
         
@@ -221,11 +233,43 @@ class MapCallbacks(BaseCallback):
             if heat_sources_layer is not None:
                 layers.append(heat_sources_layer)
                 logger.info("Added heat sources layer to map")
-        if show_pressure:
-            pressure_layer = self._create_pressure_layer()
-            if pressure_layer is not None:
-                layers.append(pressure_layer)
-                logger.info("Added pressure layer to map")
+        
+        # Six new circuit-specific layers
+        if show_supply_temp:
+            supply_temp_layer = self._create_circuit_layer("supply_temp", "Supply Temperature")
+            if supply_temp_layer is not None:
+                layers.append(supply_temp_layer)
+                logger.info("Added supply temperature layer to map")
+        
+        if show_supply_pressure:
+            supply_pressure_layer = self._create_circuit_layer("supply_pressure", "Supply Pressure")
+            if supply_pressure_layer is not None:
+                layers.append(supply_pressure_layer)
+                logger.info("Added supply pressure layer to map")
+        
+        if show_supply_mass_flow:
+            supply_mass_flow_layer = self._create_circuit_layer("supply_mass_flow", "Supply Mass Flow")
+            if supply_mass_flow_layer is not None:
+                layers.append(supply_mass_flow_layer)
+                logger.info("Added supply mass flow layer to map")
+        
+        if show_return_temp:
+            return_temp_layer = self._create_circuit_layer("return_temp", "Return Temperature")
+            if return_temp_layer is not None:
+                layers.append(return_temp_layer)
+                logger.info("Added return temperature layer to map")
+        
+        if show_return_pressure:
+            return_pressure_layer = self._create_circuit_layer("return_pressure", "Return Pressure")
+            if return_pressure_layer is not None:
+                layers.append(return_pressure_layer)
+                logger.info("Added return pressure layer to map")
+        
+        if show_return_mass_flow:
+            return_mass_flow_layer = self._create_circuit_layer("return_mass_flow", "Return Mass Flow")
+            if return_mass_flow_layer is not None:
+                layers.append(return_mass_flow_layer)
+                logger.info("Added return mass flow layer to map")
         
         logger.info(f"Total data layers built: {len(layers)}")
         return layers
@@ -409,6 +453,148 @@ class MapCallbacks(BaseCallback):
             return dl.LayerGroup(id="pressure-layer", children=polylines)
         except Exception as e:
             logger.error(f"Error creating pressure layer: {e}")
+            return None
+    
+    def _create_circuit_layer(self, layer_type, layer_name):
+        """Create a circuit-specific visualization layer (supply/return temp, pressure, mass flow).
+        
+        Args:
+            layer_type: One of "supply_temp", "supply_pressure", "supply_mass_flow", 
+                       "return_temp", "return_pressure", "return_mass_flow"
+            layer_name: Display name for logging
+        
+        Returns:
+            dl.LayerGroup with colored polylines or None if data unavailable
+        """
+        try:
+            # Determine circuit and metric from layer_type (e.g., "supply_temp", "return_pressure")
+            parts = layer_type.split("_", 1)
+            if len(parts) != 2:
+                logger.warning(f"Invalid layer type format: {layer_type}")
+                return None
+            
+            circuit_name, metric_name = parts  # e.g., ("supply", "temp"), ("return", "pressure")
+            
+            # Map to consolidated circuit GeoJSON file
+            circuit_path_key = f"{circuit_name}_circuit_geojson"
+            default_path = f"./data/pandapipes/{circuit_name}_circuit.geojson"
+            layer_path = self.data_paths.get("pandapipes", {}).get("output_paths", {}).get(circuit_path_key, default_path)
+            
+            if not Path(layer_path).exists():
+                logger.debug(f"{layer_name} layer skipped: {layer_path} not found")
+                return None
+            
+            gdf = gpd.read_file(layer_path)
+            if gdf.empty:
+                logger.debug(f"{layer_name} layer skipped: no features")
+                return None
+            
+            # Map metric name to column and unit
+            metric_mapping = {
+                "temp": ("t_avg_k", "°C"),
+                "pressure": ("p_avg_bar", "bar"),
+                "mass_flow": ("mdot_kg_per_s", "kg/s")
+            }
+            
+            if metric_name not in metric_mapping:
+                logger.warning(f"Unknown metric name: {metric_name}")
+                return None
+            
+            metric_col, unit = metric_mapping[metric_name]
+            
+            if metric_col not in gdf.columns:
+                logger.debug(f"{layer_name} layer skipped: missing {metric_col} column")
+                return None
+            
+            # Get metric range from consolidated file's metadata columns
+            metric_min_col = f"{metric_col}_min"
+            metric_max_col = f"{metric_col}_max"
+            
+            if metric_min_col in gdf.columns and metric_max_col in gdf.columns:
+                metric_min = gdf[metric_min_col].iloc[0]
+                metric_max = gdf[metric_max_col].iloc[0]
+            else:
+                # Fallback to calculating from data
+                metric_min = gdf[metric_col].min()
+                metric_max = gdf[metric_col].max()
+            
+            # Convert temperature from Kelvin to Celsius for display
+            if metric_name == "temp":
+                metric_min = metric_min - 273.15
+                metric_max = metric_max - 273.15
+            
+            span = (metric_max - metric_min) if metric_max > metric_min else 1.0
+            
+            # Convert to EPSG:4326 for Leaflet
+            if gdf.crs and str(gdf.crs) != "EPSG:4326":
+                gdf = gdf.to_crs("EPSG:4326")
+            
+            def color_for(value):
+                """Generate color based on metric value."""
+                try:
+                    norm = (float(value) - metric_min) / span
+                except Exception:
+                    norm = 0.5
+                norm = max(0.0, min(1.0, norm))
+                
+                # Color gradient: blue (low) -> green (mid) -> yellow -> red (high)
+                if norm < 0.5:
+                    # Blue to green
+                    r = 0
+                    g = int(255 * (norm * 2))
+                    b = int(255 * (1 - norm * 2))
+                else:
+                    # Green to red
+                    r = int(255 * ((norm - 0.5) * 2))
+                    g = int(255 * (1 - (norm - 0.5) * 2))
+                    b = 0
+                
+                return f"rgb({r},{g},{b})"
+            
+            polylines = []
+            for idx, row in gdf.iterrows():
+                geom = row["geometry"]
+                if geom is None:
+                    continue
+                try:
+                    coords = list(geom.coords)
+                except Exception:
+                    continue
+                
+                # Leaflet expects (lat, lon)
+                positions = [(y, x) for x, y in coords]
+                
+                metric_value = row.get(metric_col)
+                
+                # Convert temperature from Kelvin to Celsius for display
+                if metric_name == "temp" and isinstance(metric_value, (int, float)):
+                    metric_value = metric_value - 273.15
+                
+                def _fmt(val):
+                    return f"{val:.2f}" if isinstance(val, (int, float)) else "?"
+                
+                if isinstance(metric_value, (int, float)):
+                    tooltip_text = f"{layer_name}: {_fmt(metric_value)} {unit}"
+                else:
+                    tooltip_text = f"{layer_name}: N/A"
+                
+                polylines.append(dl.Polyline(
+                    id=f"{layer_type}-poly-{idx}",
+                    positions=positions,
+                    color=color_for(metric_value),
+                    weight=3,
+                    opacity=0.8,
+                    children=[dl.Tooltip(tooltip_text)]
+                ))
+            
+            if not polylines:
+                logger.debug(f"{layer_name} layer skipped: no valid polylines generated")
+                return None
+            
+            logger.info(f"{layer_name} layer created with {len(polylines)} polylines ({metric_col}: {metric_min:.2f}-{metric_max:.2f} {unit})")
+            return dl.LayerGroup(id=f"{layer_type}-layer", children=polylines)
+        except Exception as e:
+            logger.error(f"Error creating {layer_name} layer: {e}")
             return None
     
     def _ensure_network_geojson_exists(self):

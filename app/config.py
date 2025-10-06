@@ -94,7 +94,10 @@ class Config:
             "target_velocity_m_per_s": 1.5,
             "max_velocity_m_per_s": 2.5,
             "roughness_m": 1.0e-4,
-            "default_pipe_diameter_m": 0.20,
+            "pipe_diameters_by_type_m": {
+                "building_connection": 0.2,
+                "street_segment": 0.8
+            },
             "available_diameters_m": [0.032, 0.040, 0.050, 0.065, 0.080, 0.100, 0.125, 0.150, 0.200, 0.250],
             "building_heat_demand_unit": "kWh_per_year",
             "heat_source_capacity_unit": "kWh_per_year",

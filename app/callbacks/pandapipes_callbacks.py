@@ -47,14 +47,29 @@ class PandapipesCallbacks(BaseCallback):
                 progress_tracker.complete("Pandapipes net created")
 
                 status = html.Div("Pandapipes net initialized", className="success-message")
+                
+                # Display two-pipe network statistics
                 summary = html.Div([
-                    html.P(f"Junctions: {result.get('junctions', 0)}"),
-                    html.P(f"Pipes: {result.get('pipes', 0)}"),
-                    html.P(f"Sinks: {result.get('sinks', 0)}"),
-                    html.P(f"Sources: {result.get('sources', 0)}"),
-                    html.P(f"Ext grids: {result.get('ext_grids', 0)}"),
-                    html.P(f"Total sink mass flow: {result.get('total_sink_mdot_kg_per_s', 0.0):.4f} kg/s"),
-                    html.P(f"Output: {result.get('json_path', '')}")
+                    html.H4("Two-Pipe Network Summary", style={"marginBottom": "10px"}),
+                    html.P(f"Junctions (Supply): {result.get('junctions_supply', 0)}"),
+                    html.P(f"Junctions (Return): {result.get('junctions_return', 0)}"),
+                    html.P(f"Total Junctions: {result.get('junctions_total', 0)}"),
+                    html.Hr(style={"margin": "10px 0"}),
+                    html.P(f"Pipes (Supply): {result.get('pipes_supply', 0)}"),
+                    html.P(f"Pipes (Return): {result.get('pipes_return', 0)}"),
+                    html.P(f"Total Pipes: {result.get('pipes_total', 0)}"),
+                    html.P(f"Pipes clamped to min length: {result.get('pipes_clamped_to_min_length', 0)}"),
+                    html.Hr(style={"margin": "10px 0"}),
+                    html.P(f"Building Heat Exchangers: {result.get('building_heat_exchangers', 0)}"),
+                    html.P(f"Total Heat Load: {result.get('total_heat_load_W', 0.0)/1000:.1f} kW"),
+                    html.Hr(style={"margin": "10px 0"}),
+                    html.P(f"Circulation Pumps: {result.get('circulation_pumps', 0)}"),
+                    html.P(f"Plant Pump Mass Flow: {result.get('plant_pump_mass_flow_kg_per_s', 0.0):.4f} kg/s ({result.get('plant_pump_mass_flow_source', 'unknown')})"),
+                    html.Hr(style={"margin": "10px 0"}),
+                    html.P(f"Pruned Nodes: {result.get('pruned_nodes', 0)}"),
+                    html.P(f"Pruned Edges: {result.get('pruned_edges', 0)}"),
+                    html.Hr(style={"margin": "10px 0"}),
+                    html.P(f"Output: {result.get('json_path', '')}", style={"fontSize": "0.9em", "color": "#666"})
                 ], className="summary-display")
 
                 logger.info(f"Pandapipes net build summary: {result}")
@@ -91,7 +106,11 @@ class PandapipesCallbacks(BaseCallback):
                 status = (
                     html.Div("Pipeflow completed", className="success-message")
                     if result.get("converged", True)
-                    else html.Div("Pipeflow failed to converge", className="error-message")
+                    else html.Div([
+                        html.P("Pipeflow failed to converge", style={"fontWeight": "bold", "marginBottom": "5px"}),
+                        html.P(f"Mode: {result.get('mode', 'unknown')}", style={"fontSize": "0.9em"}),
+                        html.P(f"Errors: {', '.join(result.get('errors', []))}", style={"fontSize": "0.9em", "color": "#c00"})
+                    ], className="error-message")
                 )
                 # Display a compact summary
                 def fmt(val, unit=""):
@@ -101,13 +120,22 @@ class PandapipesCallbacks(BaseCallback):
                         return str(val)
 
                 summary = html.Div([
-                    html.P(f"p_min: {fmt(result.get('p_min_bar'), ' bar')}") ,
-                    html.P(f"p_max: {fmt(result.get('p_max_bar'), ' bar')}") ,
-                    html.P(f"v_max: {fmt(result.get('v_max_m_per_s'), ' m/s')}") ,
-                    html.P(f"Friction model: {result.get('friction_model_used')}") ,
-                    html.P(f"Hyd iters: {result.get('max_iter_hyd')}") ,
-                    html.P(f"Pipe results: {result.get('pipe_results_geojson', '')}") ,
-                    (html.P(f"Errors: {result.get('errors')}") if result.get('errors') else None)
+                    html.P(f"Mode: {result.get('mode', 'unknown')}"),
+                    html.P(f"Converged: {'Yes' if result.get('converged') else 'No'}"),
+                    html.Hr(style={"margin": "8px 0"}),
+                    html.P(f"Pressure min: {fmt(result.get('p_min_bar'), ' bar')}"),
+                    html.P(f"Pressure max: {fmt(result.get('p_max_bar'), ' bar')}"),
+                    html.P(f"Velocity max: {fmt(result.get('v_max_m_per_s'), ' m/s')}"),
+                    html.Hr(style={"margin": "8px 0"}),
+                    html.P(f"Friction model: {result.get('friction_model_used', 'N/A')}"),
+                    html.P(f"Max hydraulic iterations: {result.get('max_iter_hyd', 'N/A')}"),
+                    html.P(f"Max thermal iterations: {result.get('max_iter_therm', 'N/A')}"),
+                    html.Hr(style={"margin": "8px 0"}),
+                    html.P(f"Pipe results: {result.get('pipe_results_geojson', '')}", style={"fontSize": "0.9em"}),
+                    (html.Div([
+                        html.P("Errors:", style={"fontWeight": "bold", "color": "#c00", "marginBottom": "3px"}),
+                        html.Ul([html.Li(err) for err in result.get('errors', [])])
+                    ]) if result.get('errors') else None)
                 ], className="summary-display")
 
                 logger.info(f"Pipeflow run summary: {result}")

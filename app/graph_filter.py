@@ -702,7 +702,7 @@ class GraphFilter:
     def _reconnect_heat_sources_post_optimization(self, G: nx.Graph, heat_source_nodes: List[Tuple]) -> nx.Graph:
         """
         Reconnect heat sources to optimized network using bisection method, no distance limits.
-        Heat sources are always connected regardless of distance.
+        Heat sources are ALWAYS connected to STREET SEGMENTS ONLY, never to building connections.
         
         Args:
             G: Optimized graph to modify
@@ -742,12 +742,12 @@ class GraphFilter:
             # Get heat source point from node data
             heat_source_point = Point(node_data.get('x', 0), node_data.get('y', 0))
             
-            # Get current street edges from optimized network
+            # Get ONLY street segment edges from optimized network - NEVER connect to building connections
             street_edges = [(u, v, data) for u, v, data in G.edges(data=True) 
-                           if data.get('edge_type') in ['street_segment', 'building_connection']]
+                           if data.get('edge_type') == 'street_segment']
             
             if not street_edges:
-                logger.warning(f"Heat source {node_id}: No edges found in optimized network")
+                logger.warning(f"Heat source {node_id}: No street segments found in optimized network")
                 failed_connections += 1
                 continue
             

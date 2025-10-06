@@ -70,7 +70,12 @@ def create_map_component(config=None):
                     {"label": "Network", "value": "network"},
                     {"label": "Filtered Network", "value": "filtered_network"},
                     {"label": "Heat Sources", "value": "heat_sources"},
-                    {"label": "Pressure", "value": "pressure"},
+                    {"label": "Supply Temp", "value": "supply_temp"},
+                    {"label": "Supply Pressure", "value": "supply_pressure"},
+                    {"label": "Supply Mass Flow", "value": "supply_mass_flow"},
+                    {"label": "Return Temp", "value": "return_temp"},
+                    {"label": "Return Pressure", "value": "return_pressure"},
+                    {"label": "Return Mass Flow", "value": "return_mass_flow"},
                 ],
                 value=[],
                 className="map-layer-controls"

@@ -60,44 +60,55 @@ graph_filters:
     steiner_tree:
 
 pandapipes:
-  enabled: true
-  hydraulics: "2-pipe"
-  source_model: "ext_grid"
+  # Fluid properties
   fluid: "water"
   supply_temperature_C: 130.0
   return_temperature_C: 50.0
   delta_T_K: 30.0
   cp_J_per_kgK: 4180.0
   rho_kg_per_m3: 985.0
+  
+  # Junction and pressure settings
   min_junction_pressure_bar: 1.5
-  source_pressure_bar: 20.0
-  ext_grid_temperature_C: 130.0
-  use_per_source_pressures: true
-  use_per_source_temperatures: true
-  target_velocity_m_per_s: 1.5
-  max_velocity_m_per_s: 2.5
+  circ_pump_pressure_bar: 20.0
+  min_mass_flow_kg_per_s: 0.01
+  
+  # Pipe defaults
   roughness_m: 1.0e-4
-  default_pipe_diameter_m: 0.20
-  available_diameters_m: [0.032, 0.040, 0.050, 0.065, 0.080, 0.100, 0.125, 0.150, 0.200, 0.250]
+  min_pipe_length_m: 1.0
+  pipe_diameters_by_type_m:
+    building_connection: 0.2
+    street_segment: 0.8
+  
+  # Demand and capacity settings
   building_heat_demand_unit: "kWh_per_year"
   heat_source_capacity_unit: "kWh_per_year"
-  demand_scaling_factor: 1.0
   assume_continuous_operation_h_per_year: 2000
-  multi_source_split: "by_capacity"
+  
+  # Edge types to convert to pipes
   edge_types_as_pipes: ["street_segment", "building_connection", "heat_source_connection"]
+  
+  # Output paths
   output_paths:
     pandapipes_net_json_path: "./data/pandapipes/network.json"
     pandapipes_dump_dir: "./data/pandapipes/"
     pipe_results_geojson: "./data/pandapipes/pipe_results.geojson"
     junction_results_csv: "./data/pandapipes/junction_results.csv"
     pipe_results_csv: "./data/pandapipes/pipe_results.csv"
-  run_after_build: false
+    heat_exchanger_results_csv: "./data/pandapipes/heat_exchanger_results.csv"
+    supply_circuit_geojson: "./data/pandapipes/supply_circuit.geojson"
+    return_circuit_geojson: "./data/pandapipes/return_circuit.geojson"
+  
+  # Pipeflow solver settings
   pipeflow:
-    enabled: true
-    friction_model: "swamee_jain"
-    mode: "all"
-    tol: 1.0e-6
-    max_iter: 100
+    mode: "all"  # Options: "hydraulics" (recommended), "heat", "all" (sequential)
+    # Note: "all" mode solves hydraulics + heat transfer but often fails to converge.
+    # Use "hydraulics" for stable pressure/flow results, sufficient for visualization.
+    tol: 1.0e-2  # Tolerance for convergence
+    max_iter: 200  # Default max iterations (applies to both hydraulic and thermal if not specified separately)
+    max_iter_hyd: 200  # Max hydraulic iterations (overrides max_iter for hydraulics)
+    max_iter_therm: 2000  # Max thermal iterations (overrides max_iter for heat transfer)
+    check_connectivity: true  # Verify network connectivity before solving
 
 
 
