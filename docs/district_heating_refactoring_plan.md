@@ -63,7 +63,7 @@ demand}_{\text{kWh}}}{\text{operating hours}} \times 1000\).
 
 `run_pipeflow` loads the stored network (or accepts an in-memory network), executes `pp.pipeflow`, and exports results:
 
-- Pipeflow configuration uses the Swamee–Jain friction model with sequential solving. Legacy `mode="all"` values are normalised to `sequential` for compatibility.
+- Pipeflow configuration uses the Swamee–Jain friction model with sequential solving (hydraulics + heat transfer).
 - Convergence tolerances and iteration limits honour the `pandapipes.pipeflow` subsection in `config.yml`.
 - Junction, pipe, and heat-exchanger tables are exported to CSV. When available, simulated results are joined onto the static component tables (e.g., velocities, temperatures, pressures).
 - Pipe results gain helper columns (`from_junction_name`, `to_junction_name`, `circuit`). Heat exchangers gain building IDs and junction temperature/pressure snapshots.

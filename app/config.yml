@@ -101,13 +101,10 @@ pandapipes:
   
   # Pipeflow solver settings
   pipeflow:
-    mode: "all"  # Options: "hydraulics" (recommended), "heat", "all" (sequential)
-    # Note: "all" mode solves hydraulics + heat transfer but often fails to converge.
-    # Use "hydraulics" for stable pressure/flow results, sufficient for visualization.
+    # Note: Sequential mode solves hydraulics + heat transfer
     tol: 1.0e-2  # Tolerance for convergence
-    max_iter: 200  # Default max iterations (applies to both hydraulic and thermal if not specified separately)
-    max_iter_hyd: 200  # Max hydraulic iterations (overrides max_iter for hydraulics)
-    max_iter_therm: 2000  # Max thermal iterations (overrides max_iter for heat transfer)
+    max_iter_hyd: 200  # Max hydraulic iterations
+    max_iter_therm: 2000  # Max thermal iterations
     check_connectivity: true  # Verify network connectivity before solving
 
 
