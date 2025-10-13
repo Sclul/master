@@ -6,7 +6,6 @@ from pathlib import Path
 import geopandas as gpd  # type: ignore
 import networkx as nx  # type: ignore
 from shapely.geometry import LineString, Point  # type: ignore
-import json
 from heat_source_handler import HeatSourceHandler
 
 logger = logging.getLogger(__name__)
@@ -31,178 +30,93 @@ class GraphGenerator:
         Returns:
             Dict with status and file information
         """
-        try:
-            # Import here to avoid circular import
-            from utils.progress_tracker import progress_tracker
-            
-            # Load streets data
-            streets_path = self.data_paths.get("streets_path", "./data/streets.geojson")
-            
-            if not Path(streets_path).exists():
-                return {
-                    "status": "error",
-                    "message": f"Streets file not found: {streets_path}"
-                }
-            
-            # Load streets GeoDataFrame
-            streets_gdf = gpd.read_file(streets_path)
-            
-            if streets_gdf.empty:
-                return {
-                    "status": "error",
-                    "message": "No streets found in the data"
-                }
-            
-            logger.info(f"Loaded {len(streets_gdf)} street features")
-            
-            # Create network graph using u/v endpoints + all intermediate coordinates
-            G = self._generate_street_network(streets_gdf)
-            node_count = G.number_of_nodes()
-            edge_count = G.number_of_edges()
-            
-            # Connect buildings to the network - this is where progress tracking happens
-            # Check if filtered buildings exist, otherwise use regular buildings
-            filtered_buildings_path = self.data_paths.get("filtered_buildings_path", "./data/filtered_buildings.geojson")
-            regular_buildings_path = self.data_paths.get("buildings_path", "./data/buildings.geojson")
-            
-            if Path(filtered_buildings_path).exists():
-                buildings_path = filtered_buildings_path
-                logger.info(f"Using filtered buildings file: {filtered_buildings_path}")
-            elif Path(regular_buildings_path).exists():
-                buildings_path = regular_buildings_path
-                logger.info(f"Using regular buildings file: {regular_buildings_path}")
-            else:
-                logger.warning(f"No buildings file found at {filtered_buildings_path} or {regular_buildings_path}, skipping building connections.")
-                buildings_path = None
-            
-            if buildings_path:
-                buildings_gdf = gpd.read_file(buildings_path)
-                if not buildings_gdf.empty:
-                    G, new_nodes, net_new_edges = self._connect_buildings_with_bisection(G, buildings_gdf)
-                    node_count += new_nodes
-                    edge_count += net_new_edges
-                else:
-                    logger.warning(f"Buildings file {buildings_path} is empty, skipping building connections.")
-
-            # Connect heat sources to the network
-            heat_sources_gdf = self.heat_source_handler.load_heat_sources()
-            if heat_sources_gdf is not None and not heat_sources_gdf.empty:
-                logger.info(f"Connecting {len(heat_sources_gdf)} heat sources to network")
-                G, hs_new_nodes, hs_net_new_edges = self._connect_heat_sources_with_bisection(G, heat_sources_gdf)
-                node_count += hs_new_nodes
-                edge_count += hs_net_new_edges
-            else:
-                logger.info("No heat sources found, skipping heat source connections.")
-
-            # Clean up None values before writing to GraphML
-            self._clean_graph_for_graphml(G)
-            
-            # Save as GraphML
-            output_path = self.data_paths.get("network_graphml_path", "./data/heating_network.graphml")
-            output_file = Path(output_path)
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-            
-            nx.write_graphml(G, output_path)
-            
-            logger.info(f"Graph network GraphML saved to: {output_path}")
-            logger.info(f"Network contains {node_count} nodes and {edge_count} edges")
-            
-            return {
-                "status": "success",
-                "message": f"Graph network generated with {node_count} nodes and {edge_count} edges",
-                "file_path": output_path,
-                "total_nodes": node_count,
-                "total_edges": edge_count
-            }
-            
-        except Exception as e:
-            logger.error(f"Error generating graph network: {e}")
+        streets_path = self.data_paths.get("streets_path", "./data/streets.geojson")
+        if not Path(streets_path).exists():
             return {
                 "status": "error",
-                "message": str(e)
+                "message": f"Streets file not found: {streets_path}"
             }
-    
-    def _create_nodes_from_streets(self, G: nx.Graph, streets_gdf: gpd.GeoDataFrame) -> int:
-        """
-        Create nodes for every coordinate in street line strings.
-        
-        Args:
-            G: NetworkX graph to add nodes to
-            streets_gdf: GeoDataFrame with street features
-            
-        Returns:
-            Number of nodes created
-        """
-        node_id = 0
-        
-        for idx, street in streets_gdf.iterrows():
-            geometry = street.geometry
-            street_name = street.get('name', f'Street_{idx}')
-            highway_type = street.get('highway', 'unknown')
-            
-            # Extract coordinates from LineString
-            coords = self._extract_coordinates_from_geometry(geometry)
-            
-            # Create node for each coordinate
-            for coord_idx, (x, y) in enumerate(coords):
-                G.add_node(node_id, 
-                          x=x, 
-                          y=y, 
-                          node_type='street_point',
-                          street_id=str(idx),
-                          street_name=street_name,
-                          highway=highway_type,
-                          coord_index=coord_idx,
-                          total_coords=len(coords))
-                node_id += 1
-        
-        return node_id
-    
-    def _create_edges_from_streets(self, G: nx.Graph, streets_gdf: gpd.GeoDataFrame) -> int:
-        """
-        Create edges between consecutive nodes in each street.
-        
-        Args:
-            G: NetworkX graph to add edges to
-            streets_gdf: GeoDataFrame with street features
-            
-        Returns:
-            Number of edges created
-        """
-        edge_count = 0
-        current_node_id = 0
-        
-        for idx, street in streets_gdf.iterrows():
-            geometry = street.geometry
-            street_name = street.get('name', f'Street_{idx}')
-            highway_type = street.get('highway', 'unknown')
-            
-            # Extract coordinates from LineString
-            coords = self._extract_coordinates_from_geometry(geometry)
-            
-            # Create edges between consecutive nodes
-            for coord_idx in range(len(coords) - 1):
-                source_node = current_node_id + coord_idx
-                target_node = current_node_id + coord_idx + 1
-                
-                # Calculate distance between consecutive points
-                point1 = Point(coords[coord_idx])
-                point2 = Point(coords[coord_idx + 1])
-                distance = point1.distance(point2)
-                
-                G.add_edge(source_node, target_node,
-                          edge_type='street_segment',
-                          street_id=str(idx),
-                          street_name=street_name,
-                          highway=highway_type,
-                          length=distance,
-                          segment_index=coord_idx)
-                
-                edge_count += 1
-            
-            current_node_id += len(coords)
-        
-        return edge_count
+
+        try:
+            streets_gdf = gpd.read_file(streets_path)
+        except Exception as exc:  # GeoPandas raises various driver-specific exceptions
+            logger.error(f"Failed to read streets data from {streets_path}: {exc}")
+            return {
+                "status": "error",
+                "message": f"Could not read streets data: {exc}"
+            }
+
+        if streets_gdf.empty:
+            return {
+                "status": "error",
+                "message": "No streets found in the data"
+            }
+
+        logger.info(f"Loaded {len(streets_gdf)} street features")
+
+        G = self._generate_street_network(streets_gdf)
+        node_count = G.number_of_nodes()
+        edge_count = G.number_of_edges()
+
+        filtered_buildings_path = self.data_paths.get("filtered_buildings_path", "./data/filtered_buildings.geojson")
+        regular_buildings_path = self.data_paths.get("buildings_path", "./data/buildings.geojson")
+
+        if Path(filtered_buildings_path).exists():
+            buildings_path = filtered_buildings_path
+            logger.info(f"Using filtered buildings file: {filtered_buildings_path}")
+        elif Path(regular_buildings_path).exists():
+            buildings_path = regular_buildings_path
+            logger.info(f"Using regular buildings file: {regular_buildings_path}")
+        else:
+            logger.warning(
+                f"No buildings file found at {filtered_buildings_path} or {regular_buildings_path}, skipping building connections."
+            )
+            buildings_path = None
+
+        if buildings_path:
+            try:
+                buildings_gdf = gpd.read_file(buildings_path)
+            except Exception as exc:
+                logger.error(f"Failed to read buildings data from {buildings_path}: {exc}")
+                return {
+                    "status": "error",
+                    "message": f"Could not read buildings data: {exc}"
+                }
+
+            if not buildings_gdf.empty:
+                G, new_nodes, net_new_edges = self._connect_buildings_with_bisection(G, buildings_gdf)
+                node_count += new_nodes
+                edge_count += net_new_edges
+            else:
+                logger.warning(f"Buildings file {buildings_path} is empty, skipping building connections.")
+
+        heat_sources_gdf = self.heat_source_handler.load_heat_sources()
+        if heat_sources_gdf is not None and not heat_sources_gdf.empty:
+            logger.info(f"Connecting {len(heat_sources_gdf)} heat sources to network")
+            G, hs_new_nodes, hs_net_new_edges = self._connect_heat_sources_with_bisection(G, heat_sources_gdf)
+            node_count += hs_new_nodes
+            edge_count += hs_net_new_edges
+        else:
+            logger.info("No heat sources found, skipping heat source connections.")
+
+        self._clean_graph_for_graphml(G)
+
+        output_path = self.data_paths.get("network_graphml_path", "./data/heating_network.graphml")
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        nx.write_graphml(G, output_path)
+
+        logger.info(f"Graph network GraphML saved to: {output_path}")
+        logger.info(f"Network contains {node_count} nodes and {edge_count} edges")
+
+        return {
+            "status": "success",
+            "message": f"Graph network generated with {node_count} nodes and {edge_count} edges",
+            "file_path": output_path,
+            "total_nodes": node_count,
+            "total_edges": edge_count
+        }
     
     def _connect_buildings_with_bisection(self, G: nx.Graph, buildings_gdf: gpd.GeoDataFrame) -> Tuple[nx.Graph, int, int]:
         """
@@ -521,22 +435,6 @@ class GraphGenerator:
 
         return G, new_nodes_added, net_edges_added
 
-    def _extract_coordinates_from_geometry(self, geometry) -> List[Tuple[float, float]]:
-        """
-        Extract coordinates from LineString geometry.
-        
-        Args:
-            geometry: Shapely LineString geometry
-            
-        Returns:
-            List of (x, y) coordinate tuples
-        """
-        if isinstance(geometry, LineString):
-            return list(geometry.coords)
-        else:
-            logger.warning(f"Unexpected geometry type: {type(geometry)}")
-            return []
-    
     def _clean_graph_for_graphml(self, G: nx.Graph) -> None:
         """
         Remove attributes with None values from nodes and edges for GraphML compliance.

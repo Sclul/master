@@ -17,15 +17,13 @@ from pathlib import Path
 import logging
 import json
 import math
+import inspect
 
 import networkx as nx  # type: ignore
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
+import pandapipes as pp  # type: ignore
 
-try:
-    import pandapipes as pp  # type: ignore
-except Exception:  # pragma: no cover - environment without pandapipes
-    pp = None  # type: ignore
 
 from config import Config
 
@@ -142,17 +140,15 @@ class PandapipesBuilder:
             )
             node_to_ret_junc[n] = ret_idx
             
-            # Store geodata and circuit tags (attempt, but don't fail if not supported)
-            try:
-                net.junction_geodata.loc[sup_idx, ["x", "y"]] = [x, y]
-                net.junction_geodata.loc[ret_idx, ["x", "y"]] = [x, y]
-                # Try to add circuit tags if supported
-                if "circuit" not in net.junction.columns:
-                    net.junction["circuit"] = None
-                net.junction.loc[sup_idx, "circuit"] = "supply"
-                net.junction.loc[ret_idx, "circuit"] = "return"
-            except Exception as ge:
-                logger.debug(f"Could not set junction geodata/circuit for {sup_idx}/{ret_idx}: {ge}")
+            # Store geodata and circuit tags
+            net.junction_geodata.loc[sup_idx, ["x", "y"]] = [x, y]
+            net.junction_geodata.loc[ret_idx, ["x", "y"]] = [x, y]
+            
+            # Add circuit tags if column doesn't exist
+            if "circuit" not in net.junction.columns:
+                net.junction["circuit"] = None
+            net.junction.loc[sup_idx, "circuit"] = "supply"
+            net.junction.loc[ret_idx, "circuit"] = "return"
 
         # Create pipes for allowed edge types (two pipes per edge)
         allowed_edge_types = set(self.pp_cfg.get(
@@ -221,14 +217,11 @@ class PandapipesBuilder:
             )
             return_pipe_count += 1
             
-            # Try to add circuit labels to pipes if supported
-            try:
-                if "circuit" not in net.pipe.columns:
-                    net.pipe["circuit"] = None
-                net.pipe.loc[net.pipe.index[-2], "circuit"] = "supply"
-                net.pipe.loc[net.pipe.index[-1], "circuit"] = "return"
-            except Exception:
-                pass
+            # Add circuit tags to pipes
+            if "circuit" not in net.pipe.columns:
+                net.pipe["circuit"] = None
+            net.pipe.loc[net.pipe.index[-2], "circuit"] = "supply"
+            net.pipe.loc[net.pipe.index[-1], "circuit"] = "return"
 
         # Compute total building heat demand for mass flow calculation
         op_hours = float(self.pp_cfg.get("assume_continuous_operation_h_per_year", 2000))
@@ -271,13 +264,10 @@ class PandapipesBuilder:
                 building_heat_exchangers.append(hex_idx)
                 total_heat_load_w += qext_w
                 
-                # Try to tag with component_role if supported
-                try:
-                    if "component_role" not in net.heat_exchanger.columns:
-                        net.heat_exchanger["component_role"] = None
-                    net.heat_exchanger.loc[hex_idx, "component_role"] = "building_hex"
-                except Exception:
-                    pass
+                # Tag with component_role
+                if "component_role" not in net.heat_exchanger.columns:
+                    net.heat_exchanger["component_role"] = None
+                net.heat_exchanger.loc[hex_idx, "component_role"] = "building_hex"
 
         # Create circulation pumps at heat sources
         min_mass_flow = float(self.pp_cfg.get("min_mass_flow_kg_per_s", 0.01))
@@ -391,53 +381,47 @@ class PandapipesBuilder:
         # Check connectivity if enabled
         check_connectivity = pf_cfg.get("check_connectivity", True)
         if check_connectivity:
-            try:
-                # Verify network has basic components
-                if len(net.junction) == 0:
-                    raise RuntimeError("Network has no junctions")
-                if len(net.pipe) == 0:
-                    raise RuntimeError("Network has no pipes")
-                logger.debug(f"Network connectivity check passed: {len(net.junction)} junctions, {len(net.pipe)} pipes")
-            except Exception as e:
-                logger.warning(f"Network connectivity check failed: {e}")
+            if len(net.junction) == 0:
+                raise RuntimeError("Network has no junctions")
+            if len(net.pipe) == 0:
+                raise RuntimeError("Network has no pipes")
+            logger.debug(
+                "Network connectivity check passed: %s junctions, %s pipes",
+                len(net.junction),
+                len(net.pipe),
+            )
 
         logger.info(f"Running pipeflow: friction_model={friction_model}, mode={mode}, tol={tol}, max_iter_hyd={max_iter_hyd}, max_iter_therm={max_iter_therm}")
 
         pipeflow_errors: List[str] = []
-        
-        # Execute pipeflow with parameter compatibility handling
+        converged = False
+
+        pipeflow_params = set(inspect.signature(pp.pipeflow).parameters.keys())
+        call_kwargs: Dict[str, Any] = {
+            "friction_model": friction_model,
+            "mode": mode,
+        }
+
+        if {"tol_p", "tol_v"}.issubset(pipeflow_params):
+            call_kwargs["tol_p"] = tol
+            call_kwargs["tol_v"] = tol
+        elif "tol" in pipeflow_params:
+            call_kwargs["tol"] = tol
+
+        if {"max_iter_hyd", "max_iter_therm"}.issubset(pipeflow_params):
+            call_kwargs["max_iter_hyd"] = max_iter_hyd
+            call_kwargs["max_iter_therm"] = max_iter_therm
+        elif "max_iter" in pipeflow_params:
+            call_kwargs["max_iter"] = max_iter
+
         try:
-            try:
-                # Try with separate hydraulic and thermal iteration limits (newer versions)
-                pp.pipeflow(
-                    net,
-                    friction_model=friction_model,
-                    mode=mode,
-                    tol_p=tol,
-                    tol_v=tol,
-                    max_iter_hyd=max_iter_hyd,
-                    max_iter_therm=max_iter_therm,
-                )
-            except TypeError:
-                # Try with max_iter parameter (older versions)
-                try:
-                    pp.pipeflow(
-                        net,
-                        friction_model=friction_model,
-                        mode=mode,
-                        tol=tol,
-                        max_iter=max_iter,
-                    )
-                except TypeError:
-                    # Bare minimum call
-                    pp.pipeflow(net)
+            pp.pipeflow(net, **call_kwargs)
             converged = True
             logger.info("Pipeflow converged successfully")
-        except Exception as e:
-            converged = False
-            error_msg = str(e)
+        except Exception as exc:
+            error_msg = str(exc)
             pipeflow_errors.append(error_msg)
-            logger.error(f"Pipeflow failed: {e}")
+            logger.error(f"Pipeflow failed: {exc}")
             return {
                 "converged": False,
                 "errors": pipeflow_errors,
@@ -700,21 +684,15 @@ class PandapipesBuilder:
         p_min = float("nan")
         p_max = float("nan")
         if hasattr(net, "res_junction") and not net.res_junction.empty and "p_bar" in net.res_junction.columns:
-            try:
-                p_min = float(net.res_junction["p_bar"].min())
-                p_max = float(net.res_junction["p_bar"].max())
-            except Exception:
-                pass
+            p_min = float(net.res_junction["p_bar"].min())
+            p_max = float(net.res_junction["p_bar"].max())
 
         v_max = float("nan")
         if hasattr(net, "res_pipe") and not net.res_pipe.empty:
-            try:
-                if "v_mean_m_per_s" in net.res_pipe.columns:
-                    v_max = float(net.res_pipe["v_mean_m_per_s"].max())
-                elif "v_m_per_s" in net.res_pipe.columns:
-                    v_max = float(net.res_pipe["v_m_per_s"].max())
-            except Exception:
-                pass
+            if "v_mean_m_per_s" in net.res_pipe.columns:
+                v_max = float(net.res_pipe["v_mean_m_per_s"].max())
+            elif "v_m_per_s" in net.res_pipe.columns:
+                v_max = float(net.res_pipe["v_m_per_s"].max())
 
         # Get iteration count if available
         iter_count = None

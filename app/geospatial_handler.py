@@ -433,8 +433,6 @@ class GeospatialHandler:
             return json.dumps(data, indent=2)
         except FileNotFoundError:
             return "No streets saved yet."
-        except Exception as e:
-            return f"Error reading {streets_path}: {e}"
     
     def load_buildings_data(self, buildings_path: str) -> Optional[str]:
         """Load buildings data from file for display."""
@@ -444,5 +442,3 @@ class GeospatialHandler:
             return json.dumps(data, indent=2)
         except FileNotFoundError:
             return "No buildings saved yet."
-        except Exception as e:
-            return f"Error reading {buildings_path}: {e}"

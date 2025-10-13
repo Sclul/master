@@ -22,25 +22,20 @@ class HeatSourceHandler:
         
         logger.info("HeatSourceHandler initialized")
     
-    def load_heat_sources(self) -> Optional[gpd.GeoDataFrame]:
+    def load_heat_sources(self) -> gpd.GeoDataFrame:
         """Load existing heat sources from GeoJSON file."""
-        try:
-            if not Path(self.heat_sources_path).exists():
-                logger.info("No existing heat sources file found")
-                return self._create_empty_heat_sources_gdf()
-            
-            heat_sources_gdf = gpd.read_file(self.heat_sources_path)
-            
-            if heat_sources_gdf.empty:
-                logger.info("Heat sources file is empty")
-                return self._create_empty_heat_sources_gdf()
-            
-            logger.info(f"Loaded {len(heat_sources_gdf)} heat sources")
-            return heat_sources_gdf
-            
-        except Exception as e:
-            logger.error(f"Error loading heat sources: {e}")
+        if not Path(self.heat_sources_path).exists():
+            logger.info("No existing heat sources file found")
             return self._create_empty_heat_sources_gdf()
+        
+        heat_sources_gdf = gpd.read_file(self.heat_sources_path)
+        
+        if heat_sources_gdf.empty:
+            logger.info("Heat sources file is empty")
+            return self._create_empty_heat_sources_gdf()
+        
+        logger.info(f"Loaded {len(heat_sources_gdf)} heat sources")
+        return heat_sources_gdf
     
     def _create_empty_heat_sources_gdf(self) -> gpd.GeoDataFrame:
         """Create an empty GeoDataFrame with proper heat source schema."""

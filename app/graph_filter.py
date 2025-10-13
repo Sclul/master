@@ -11,6 +11,44 @@ import numpy as np # type: ignore
 logger = logging.getLogger(__name__)
 
 
+def remove_non_building_end_nodes(G: nx.Graph) -> int:
+    """
+    Remove end nodes (degree = 1) that are not buildings.
+    Continues iteratively until no more non-building end nodes exist.
+    
+    Args:
+        G: Graph to modify in-place
+        
+    Returns:
+        Number of nodes removed
+    """
+    removed_count = 0
+    
+    while True:
+        # Find end nodes that are not buildings
+        end_nodes_to_remove = []
+        
+        for node in G.nodes():
+            if G.degree(node) == 1:  # End node (degree = 1)
+                node_type = G.nodes[node].get('node_type', 'unknown')
+                if node_type != 'building' and node_type != 'heat_source':
+                    end_nodes_to_remove.append(node)
+        
+        # If no more end nodes to remove, we're done
+        if not end_nodes_to_remove:
+            break
+        
+        # Remove the end nodes
+        G.remove_nodes_from(end_nodes_to_remove)
+        removed_count += len(end_nodes_to_remove)
+        
+        logger.debug(f"Removed {len(end_nodes_to_remove)} non-building end nodes")
+    
+    if removed_count > 0:
+        logger.info(f"Total non-building end nodes removed: {removed_count}")
+    return removed_count
+
+
 class PruningAlgorithm(ABC):
     """Abstract base class for graph pruning algorithms."""
     
@@ -22,7 +60,7 @@ class PruningAlgorithm(ABC):
         Returns:
             Tuple of (pruned_graph, pruning_statistics)
         """
-        pass
+        ...
 
 
 class MinimumSpanningTreePruner(PruningAlgorithm):
@@ -104,7 +142,7 @@ class MinimumSpanningTreePruner(PruningAlgorithm):
         
         # Step 6: Remove end nodes that are not buildings
         nodes_before_cleanup = mst_graph.number_of_nodes()
-        removed_end_nodes = self._remove_non_building_end_nodes(mst_graph)
+        removed_end_nodes = remove_non_building_end_nodes(mst_graph)
         nodes_after_cleanup = mst_graph.number_of_nodes()
         
         logger.info(f"MST cleanup: {nodes_before_cleanup} -> {nodes_after_cleanup} nodes ({removed_end_nodes} end nodes removed)")
@@ -128,42 +166,6 @@ class MinimumSpanningTreePruner(PruningAlgorithm):
         }
         
         return mst_graph, stats
-
-    def _remove_non_building_end_nodes(self, G: nx.Graph) -> int:
-        """
-        Remove end nodes (degree = 1) that are not buildings.
-        Continues iteratively until no more non-building end nodes exist.
-        
-        Args:
-            G: Graph to modify in-place
-            
-        Returns:
-            Number of nodes removed
-        """
-        removed_count = 0
-        
-        while True:
-            # Find end nodes that are not buildings
-            end_nodes_to_remove = []
-            
-            for node in G.nodes():
-                if G.degree(node) == 1:  # End node (degree = 1)
-                    node_type = G.nodes[node].get('node_type', 'unknown')
-                    if node_type != 'building':
-                        end_nodes_to_remove.append(node)
-            
-            # If no more end nodes to remove, we're done
-            if not end_nodes_to_remove:
-                break
-            
-            # Remove the end nodes
-            G.remove_nodes_from(end_nodes_to_remove)
-            removed_count += len(end_nodes_to_remove)
-            
-            logger.info(f"Removed {len(end_nodes_to_remove)} non-building end nodes")
-        
-        logger.info(f"Total non-building end nodes removed: {removed_count}")
-        return removed_count
 
 
 
@@ -436,7 +438,7 @@ class SteinerTreePruner(PruningAlgorithm):
         
         # Step 9: Remove non-building end nodes iteratively
         nodes_before_end_cleanup = steiner_graph.number_of_nodes()
-        removed_end_nodes = self._remove_non_building_end_nodes(steiner_graph)
+        removed_end_nodes = remove_non_building_end_nodes(steiner_graph)
         nodes_after_end_cleanup = steiner_graph.number_of_nodes()
         
         logger.info(f"End node cleanup: {nodes_before_end_cleanup} -> {nodes_after_end_cleanup} nodes ({removed_end_nodes} non-building end nodes removed)")
@@ -481,42 +483,6 @@ class SteinerTreePruner(PruningAlgorithm):
         }
         
         return steiner_graph, stats
-    
-    def _remove_non_building_end_nodes(self, G: nx.Graph) -> int:
-        """
-        Remove end nodes (degree = 1) that are not buildings.
-        Continues iteratively until no more non-building end nodes exist.
-        
-        Args:
-            G: Graph to modify in-place
-            
-        Returns:
-            Number of nodes removed
-        """
-        removed_count = 0
-        
-        while True:
-            # Find end nodes that are not buildings
-            end_nodes_to_remove = []
-            
-            for node in G.nodes():
-                if G.degree(node) == 1:  # End node (degree = 1)
-                    node_type = G.nodes[node].get('node_type', 'unknown')
-                    if node_type != 'building':
-                        end_nodes_to_remove.append(node)
-            
-            # If no more end nodes to remove, we're done
-            if not end_nodes_to_remove:
-                break
-            
-            # Remove the end nodes
-            G.remove_nodes_from(end_nodes_to_remove)
-            removed_count += len(end_nodes_to_remove)
-            
-            logger.info(f"Removed {len(end_nodes_to_remove)} non-building end nodes")
-        
-        logger.info(f"Total non-building end nodes removed: {removed_count}")
-        return removed_count
 
 
 class GraphFilter:

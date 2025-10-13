@@ -21,4 +21,4 @@ class BaseCallback(ABC):
     @abstractmethod
     def _register_callbacks(self):
         """Register callbacks specific to this module."""
-        pass
+        ...

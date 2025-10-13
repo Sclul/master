@@ -43,47 +43,40 @@ class HeatSourceCallbacks(BaseCallback):
             if not self._heat_source_mode:
                 return no_update, no_update, no_update
             
-            try:
-                lat, lng = click_coords
-                production = production_value if production_value is not None else 1000.0
+            lat, lng = click_coords
+            production = production_value if production_value is not None else 1000.0
+            
+            logger.info(f"Adding heat source at coordinates: {lat}, {lng} with production: {production}")
+            
+            # Add heat source
+            result = self.heat_source_handler.add_heat_source(
+                latitude=lat,
+                longitude=lng,
+                annual_heat_production=production,
+                heat_source_type="Generic"
+            )
+            
+            # Get updated summary
+            summary = self.heat_source_handler.get_heat_sources_summary()
+            
+            if result.get("status") == "success":
+                status_msg = html.Div([
+                    html.P(f"{result['message']}", className="success-message"),
+                    html.P(f"Location: {lat:.4f}, {lng:.4f}", className="info-message"),
+                    html.P(f"Production: {production} kWh/year", className="info-message")
+                ])
                 
-                logger.info(f"Adding heat source at coordinates: {lat}, {lng} with production: {production}")
+                summary_msg = html.Div([
+                    html.P(f"Total Sources: {summary.get('total_count', 0)}", className="info-message"),
+                    html.P(f"Total Production: {summary.get('total_production', 0):.0f} kWh/year", className="info-message")
+                ])
                 
-                # Add heat source
-                result = self.heat_source_handler.add_heat_source(
-                    latitude=lat,
-                    longitude=lng,
-                    annual_heat_production=production,
-                    heat_source_type="Generic"
-                )
+                # Reset heat source mode after successful placement
+                self._heat_source_mode = False
                 
-                # Get updated summary
-                summary = self.heat_source_handler.get_heat_sources_summary()
-                
-                if result.get("status") == "success":
-                    status_msg = html.Div([
-                        html.P(f"{result['message']}", className="success-message"),
-                        html.P(f"Location: {lat:.4f}, {lng:.4f}", className="info-message"),
-                        # FIX: unit label
-                        html.P(f"Production: {production} kWh/year", className="info-message")
-                    ])
-                    
-                    summary_msg = html.Div([
-                        html.P(f"Total Sources: {summary.get('total_count', 0)}", className="info-message"),
-                        html.P(f"Total Production: {summary.get('total_production', 0):.0f} kWh/year", className="info-message")
-                    ])
-                    
-                    # Reset heat source mode after successful placement
-                    self._heat_source_mode = False
-                    
-                    return status_msg, summary_msg, {"updated": True, "timestamp": result.get("heat_source_id")}
-                else:
-                    error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
-                    return error_msg, no_update, no_update
-                    
-            except Exception as e:
-                logger.error(f"Error handling map click for heat source: {e}")
-                error_msg = html.Div(f"Error adding heat source: {str(e)}", className="error-message")
+                return status_msg, summary_msg, {"updated": True, "timestamp": result.get("heat_source_id")}
+            else:
+                error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
                 return error_msg, no_update, no_update
         
         @self.app.callback(
@@ -115,25 +108,19 @@ class HeatSourceCallbacks(BaseCallback):
             if not n_clicks:
                 return no_update, no_update, no_update
             
-            try:
-                logger.info("Clearing all heat sources")
-                result = self.heat_source_handler.clear_all_heat_sources()
+            logger.info("Clearing all heat sources")
+            result = self.heat_source_handler.clear_all_heat_sources()
+            
+            if result.get("status") == "success":
+                status_msg = html.Div(f"{result['message']}", className="success-message")
+                summary_msg = html.Div("No heat sources", className="info-message")
                 
-                if result.get("status") == "success":
-                    status_msg = html.Div(f"{result['message']}", className="success-message")
-                    summary_msg = html.Div("No heat sources", className="info-message")
-                    
-                    # Reset heat source mode
-                    self._heat_source_mode = False
-                    
-                    return status_msg, summary_msg, {"cleared": True, "timestamp": n_clicks}
-                else:
-                    error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
-                    return error_msg, no_update, no_update
-                    
-            except Exception as e:
-                logger.error(f"Error clearing heat sources: {e}")
-                error_msg = html.Div(f"Error clearing heat sources: {str(e)}", className="error-message")
+                # Reset heat source mode
+                self._heat_source_mode = False
+                
+                return status_msg, summary_msg, {"cleared": True, "timestamp": n_clicks}
+            else:
+                error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
                 return error_msg, no_update, no_update
         
         @self.app.callback(
@@ -146,25 +133,19 @@ class HeatSourceCallbacks(BaseCallback):
             if not heat_sources_data:
                 return no_update
             
-            try:
-                summary = self.heat_source_handler.get_heat_sources_summary()
+            summary = self.heat_source_handler.get_heat_sources_summary()
+            
+            if summary.get("status") == "success":
+                total_count = summary.get("total_count", 0)
+                total_production = summary.get("total_production", 0)
                 
-                if summary.get("status") == "success":
-                    total_count = summary.get("total_count", 0)
-                    total_production = summary.get("total_production", 0)
-                    
-                    if total_count == 0:
-                        return html.Div("No heat sources", className="info-message")
-                    else:
-                        return html.Div([
-                            html.H4("Heat Source Summary", className="summary-title"),
-                            html.P(f"Total Sources: {summary.get('count', 0)}", className="info-message"),
-                            # FIX: unit label
-                            html.P(f"Total Production: {total_production:.0f} kWh/year", className="info-message")
-                        ])
+                if total_count == 0:
+                    return html.Div("No heat sources", className="info-message")
                 else:
-                    return html.Div(f"{summary.get('message', 'Error getting summary')}", className="error-message")
-                    
-            except Exception as e:
-                logger.error(f"Error updating heat source summary: {e}")
-                return html.Div(f"Error: {str(e)}", className="error-message")
+                    return html.Div([
+                        html.H4("Heat Source Summary", className="summary-title"),
+                        html.P(f"Total Sources: {summary.get('count', 0)}", className="info-message"),
+                        html.P(f"Total Production: {total_production:.0f} kWh/year", className="info-message")
+                    ])
+            else:
+                return html.Div(f"{summary.get('message', 'Error getting summary')}", className="error-message")
