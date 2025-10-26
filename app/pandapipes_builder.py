@@ -464,37 +464,47 @@ class PandapipesBuilder:
             pipeflow_errors.append(error_msg)
             logger.error(f"Pipeflow failed: {exc}")
             
-            # Check if it actually converged despite the exception (low residual)
-            # Pandapipes sometimes reports non-convergence even with tiny residuals
-            # Extract residual from error message if present
+            # Try to extract residual from exception message for comparison with tolerance
             import re
-            residual_match = re.search(r'Norm of residual:\s*([\d.e+-]+)', error_msg)
+            detected_residual = None
+            
+            residual_match = re.search(r'(?:Norm of residual|residual):\s*([\d.e+-]+)', error_msg, re.IGNORECASE)
             if residual_match:
                 try:
-                    residual = float(residual_match.group(1))
-                    logger.info(f"Detected residual value from exception: {residual}")
-                    # If residual is below tolerance, treat as converged
-                    if residual < tol * 10:  # Use 10x tolerance for safety
-                        logger.warning(f"Residual ({residual}) is below {tol*10}, treating as converged despite exception")
-                        converged = True
-                        pipeflow_errors = []  # Clear the error
+                    detected_residual = float(residual_match.group(1))
                 except (ValueError, AttributeError):
                     pass
             
-            # Also check net.converged flag if available
-            if not converged and hasattr(net, "converged") and net.converged:
-                logger.warning(f"Exception raised but net.converged=True, treating as converged")
-                converged = True
-                pipeflow_errors = []  # Clear the error since we're treating it as success
+            # Also check if pandapipes stored residual in the network object
+            if detected_residual is None and hasattr(net, '_internal_results') and isinstance(net._internal_results, dict):
+                # Try to find residual in internal results
+                detected_residual = net._internal_results.get('residual_norm_hydraulics')
+                if detected_residual is None and 'hydraulics' in net._internal_results:
+                    hyd_data = net._internal_results['hydraulics']
+                    if isinstance(hyd_data, dict):
+                        detected_residual = hyd_data.get('residual')
             
-            # If still not converged after checks, return error
-            if not converged:
-                return {
-                    "converged": False,
-                    "errors": pipeflow_errors,
-                    "friction_model": friction_model,
-                    "mode": mode,
-                }
+            if detected_residual is None and hasattr(net, '_ppc') and isinstance(net._ppc, dict):
+                detected_residual = net._ppc.get('et')
+            
+            # Log residual comparison if found
+            if detected_residual is not None:
+                logger.info(f"Detected residual: {detected_residual:.6e}")
+                logger.info(f"Configured tolerance: {tol:.6e}")
+                if detected_residual < tol:
+                    logger.warning(f"RESIDUAL ({detected_residual:.6e}) IS BELOW TOLERANCE ({tol:.6e}) BUT SOLVER FAILED!")
+                    logger.warning(f"Solver hit max_iter ({max_iter_hyd}) before converging")
+                else:
+                    logger.info(f"Residual ({detected_residual:.6e}) exceeds tolerance ({tol:.6e})")
+            else:
+                logger.warning(f"Could not detect residual value from exception or network object")
+            
+            return {
+                "converged": False,
+                "errors": pipeflow_errors,
+                "friction_model": friction_model,
+                "mode": mode,
+            }
 
         # Output paths
         out_paths = self.pp_cfg.get("output_paths", {})
@@ -739,9 +749,13 @@ class PandapipesBuilder:
                     geojson_paths[f"{circuit_name}_circuit"] = output_path
                     
                     logger.info(f"Exported {circuit_name} circuit GeoJSON to {output_path}")
-                    logger.info(f"  Temperature: {metrics['t_avg_k']['min']:.1f}-{metrics['t_avg_k']['max']:.1f} K")
-                    logger.info(f"  Pressure: {metrics['p_avg_bar']['min']:.2f}-{metrics['p_avg_bar']['max']:.2f} bar")
-                    logger.info(f"  Mass flow: {metrics['mdot_kg_per_s']['min']:.3f}-{metrics['mdot_kg_per_s']['max']:.3f} kg/s")
+                    # Only log metrics if they have valid values
+                    if metrics['t_avg_k']['min'] is not None and metrics['t_avg_k']['max'] is not None:
+                        logger.info(f"  Temperature: {metrics['t_avg_k']['min']:.1f}-{metrics['t_avg_k']['max']:.1f} K")
+                    if metrics['p_avg_bar']['min'] is not None and metrics['p_avg_bar']['max'] is not None:
+                        logger.info(f"  Pressure: {metrics['p_avg_bar']['min']:.2f}-{metrics['p_avg_bar']['max']:.2f} bar")
+                    if metrics['mdot_kg_per_s']['min'] is not None and metrics['mdot_kg_per_s']['max'] is not None:
+                        logger.info(f"  Mass flow: {metrics['mdot_kg_per_s']['min']:.3f}-{metrics['mdot_kg_per_s']['max']:.3f} kg/s")
                 
         except Exception as e:
             logger.warning(f"Could not export GeoJSON: {e}")
