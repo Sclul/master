@@ -78,13 +78,14 @@ def create_control_panel(config=None):
                        id="clear-heat-sources-btn", 
                        className="btn btn-secondary"),  # Unified button class
             html.Div([
-                html.Label("Annual Heat Production (kW/year):", className="form-label"),  # Unified label
+                html.Label("Annual Heat Production (GW/year):", className="form-label"),  # Unified label
                 dcc.Input(
                     id="heat-source-production-input",
                     type="number",
-                    placeholder="e.g., 1000",
-                    value=1000,
+                    placeholder="e.g., 1",
+                    value=1,
                     min=0,
+                    step=0.001,
                     className="form-input"  # Unified input class
                 )
             ], className="form-group"),  # Unified form group

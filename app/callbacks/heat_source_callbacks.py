@@ -44,9 +44,9 @@ class HeatSourceCallbacks(BaseCallback):
                 return no_update, no_update, no_update
             
             lat, lng = click_coords
-            production = production_value if production_value is not None else 1000.0
+            production = production_value if production_value is not None else 1.0
             
-            logger.info(f"Adding heat source at coordinates: {lat}, {lng} with production: {production}")
+            logger.info(f"Adding heat source at coordinates: {lat}, {lng} with production: {production} GW/year")
             
             # Add heat source
             result = self.heat_source_handler.add_heat_source(
@@ -63,12 +63,14 @@ class HeatSourceCallbacks(BaseCallback):
                 status_msg = html.Div([
                     html.P(f"{result['message']}", className="success-message"),
                     html.P(f"Location: {lat:.4f}, {lng:.4f}", className="info-message"),
-                    html.P(f"Production: {production} kWh/year", className="info-message")
+                    html.P(f"Production: {production} GW/year", className="info-message")
                 ])
                 
+                # Convert total production from kW to GW for display
+                total_production_gw = summary.get('total_production', 0) / 1_000_000
                 summary_msg = html.Div([
                     html.P(f"Total Sources: {summary.get('total_count', 0)}", className="info-message"),
-                    html.P(f"Total Production: {summary.get('total_production', 0):.0f} kWh/year", className="info-message")
+                    html.P(f"Total Production: {total_production_gw:.3f} GW/year", className="info-message")
                 ])
                 
                 # Reset heat source mode after successful placement
@@ -142,10 +144,12 @@ class HeatSourceCallbacks(BaseCallback):
                 if total_count == 0:
                     return html.Div("No heat sources", className="info-message")
                 else:
+                    # Convert total production from kW to GW for display
+                    total_production_gw = total_production / 1_000_000
                     return html.Div([
                         html.H4("Heat Source Summary", className="summary-title"),
                         html.P(f"Total Sources: {summary.get('count', 0)}", className="info-message"),
-                        html.P(f"Total Production: {total_production:.0f} kWh/year", className="info-message")
+                        html.P(f"Total Production: {total_production_gw:.3f} GW/year", className="info-message")
                     ])
             else:
                 return html.Div(f"{summary.get('message', 'Error getting summary')}", className="error-message")

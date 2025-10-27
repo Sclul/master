@@ -49,7 +49,7 @@ class HeatSourceHandler:
         )
     
     def add_heat_source(self, latitude: float, longitude: float, 
-                       annual_heat_production: float = 1000.0,
+                       annual_heat_production: float = 1.0,
                        heat_source_type: str = "Generic") -> Dict[str, Any]:
         """
         Add a new heat source at the specified coordinates.
@@ -57,7 +57,7 @@ class HeatSourceHandler:
         Args:
             latitude: Latitude of the heat source
             longitude: Longitude of the heat source  
-            annual_heat_production: Annual heat production in kW/year
+            annual_heat_production: Annual heat production in GW/year
             heat_source_type: Type of heat source
             
         Returns:
@@ -70,9 +70,12 @@ class HeatSourceHandler:
             # Create new heat source
             heat_source_id = f"hs_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(heat_sources_gdf) + 1}"
             
+            # Convert GW/year to kW/year for internal storage
+            annual_heat_production_kw = float(annual_heat_production) * 1_000_000
+            
             new_heat_source = {
                 'id': heat_source_id,
-                'annual_heat_production': float(annual_heat_production),
+                'annual_heat_production': annual_heat_production_kw,
                 'heat_source_type': str(heat_source_type),
                 'geometry': Point(longitude, latitude)
             }
@@ -98,7 +101,7 @@ class HeatSourceHandler:
             result = self.save_heat_sources(updated_gdf)
             
             if result.get("status") == "success":
-                logger.info(f"Added heat source at ({latitude}, {longitude}) with {annual_heat_production} kW/year")
+                logger.info(f"Added heat source at ({latitude}, {longitude}) with {annual_heat_production} GW/year")
                 return {
                     "status": "success",
                     "message": f"Heat source added successfully",
