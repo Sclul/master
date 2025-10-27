@@ -117,3 +117,15 @@ class UICallbacks(BaseCallback):
                     ])
             
             return summary_elements if summary_elements else "No data available"
+
+        @self.app.callback(
+            Output("operating-hours-store", "data"),
+            Input("operating-hours-input", "value"),
+            prevent_initial_call=False
+        )
+        def store_operating_hours(operating_hours):
+            """Store the operating hours value."""
+            if operating_hours is None or operating_hours < 1:
+                # Return default value from config
+                return self.config.pandapipes.get("assume_continuous_operation_h_per_year", 2000)
+            return operating_hours

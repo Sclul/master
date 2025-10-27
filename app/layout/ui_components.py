@@ -47,6 +47,19 @@ def create_control_panel(config=None):
             html.Button("Draw Analysis Area", 
                        id="start-measurement-btn", 
                        className="btn btn-primary"),  # Unified button class
+            html.Div([
+                html.Label("Operating Hours (h/year):", className="form-label"),
+                dcc.Input(
+                    id="operating-hours-input",
+                    type="number",
+                    placeholder="e.g., 2000",
+                    value=config.pandapipes.get("assume_continuous_operation_h_per_year", 2000) if config else 2000,
+                    min=1,
+                    max=8760,
+                    step=1,
+                    className="form-input"
+                )
+            ], className="form-group"),
             html.Div(id="measurement-status", className="status-display"),  # Unified status class
             # Add data summary under area selection
             html.Div([

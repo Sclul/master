@@ -40,8 +40,12 @@ class PandapipesBuilder:
         self.paths = config.data_paths
 
     # ------------- Public API -------------
-    def build_from_graphml(self, graphml_path: str | None = None) -> Dict[str, Any]:
+    def build_from_graphml(self, graphml_path: str | None = None, operating_hours: float | None = None) -> Dict[str, Any]:
         """Convert GraphML into a two-pipe pandapipes net and write outputs.
+
+        Args:
+            graphml_path: Optional path to GraphML file. If None, uses filtered or unfiltered path from config.
+            operating_hours: Optional operating hours per year. If None, uses config value.
 
         Returns a dict summary with counts and file paths.
         """
@@ -224,7 +228,11 @@ class PandapipesBuilder:
             net.pipe.loc[net.pipe.index[-1], "circuit"] = "return"
 
         # Compute total building heat demand for mass flow calculation
-        op_hours = float(self.pp_cfg.get("assume_continuous_operation_h_per_year", 2000))
+        # Use provided operating_hours or fall back to config
+        if operating_hours is None:
+            op_hours = float(self.pp_cfg.get("assume_continuous_operation_h_per_year", 2000))
+        else:
+            op_hours = float(operating_hours)
 
         def annual_to_kw(val_kwh_per_year: float) -> float:
             if op_hours <= 0:

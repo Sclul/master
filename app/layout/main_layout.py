@@ -41,6 +41,7 @@ def create_layout(config=None):
             dcc.Store(id="filter-options-store"),
             dcc.Store(id="network-data"),
             dcc.Store(id="heat-sources-data"),
+            dcc.Store(id="operating-hours-store"),
             # Simulation state (UI-only scaffolding)
             dcc.Store(id="sim-params-store"),
             dcc.Store(id="sim-results-store"),

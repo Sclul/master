@@ -26,10 +26,13 @@ class PandapipesCallbacks(BaseCallback):
                 Output("sim-status", "children"),
                 Output("sim-summary", "children")
             ],
-            Input("sim-init-btn", "n_clicks"),
+            [
+                Input("sim-init-btn", "n_clicks"),
+                Input("operating-hours-store", "data")
+            ],
             prevent_initial_call=True
         )
-        def on_sim_init(n_clicks):
+        def on_sim_init(n_clicks, operating_hours):
             """Handle Initialize Net button: build pandapipes net from GraphML and summarize."""
             try:
                 if not n_clicks:
@@ -42,7 +45,7 @@ class PandapipesCallbacks(BaseCallback):
                 progress_tracker.start("Initializing pandapipes net...")
 
                 builder = PandapipesBuilder(self.config)
-                result = builder.build_from_graphml()
+                result = builder.build_from_graphml(operating_hours=operating_hours)
 
                 progress_tracker.complete("Pandapipes net created")
 
