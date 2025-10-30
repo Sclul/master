@@ -40,12 +40,14 @@ class PandapipesBuilder:
         self.paths = config.data_paths
 
     # ------------- Public API -------------
-    def build_from_graphml(self, graphml_path: str | None = None, operating_hours: float | None = None) -> Dict[str, Any]:
+    def build_from_graphml(self, graphml_path: str | None = None, operating_hours: float | None = None, 
+                          mass_flow_mode: str = "demand") -> Dict[str, Any]:
         """Convert GraphML into a two-pipe pandapipes net and write outputs.
 
         Args:
             graphml_path: Optional path to GraphML file. If None, uses filtered or unfiltered path from config.
             operating_hours: Optional operating hours per year. If None, uses config value.
+            mass_flow_mode: Either "demand" (calculate from building loads) or "manual" (calculate from heat source production).
 
         Returns a dict summary with counts and file paths.
         """
@@ -281,17 +283,42 @@ class PandapipesBuilder:
         min_mass_flow = float(self.pp_cfg.get("min_mass_flow_kg_per_s", 0.01))
         circ_pump_pressure = float(self.pp_cfg.get("circ_pump_pressure_bar", 20.0))
         
-        # Calculate total mass flow from building loads
-        if total_heat_load_w > 0:
-            total_mass_flow = total_heat_load_w / (cp * max(1e-6, delta_T))
+        # Calculate total mass flow based on selected mode
+        if mass_flow_mode == "manual":
+            # Manual mode: Calculate from heat source production
+            total_production_kw = 0.0
+            for n in heat_source_nodes:
+                node_data = G.nodes[n]
+                annual_production = node_data.get("annual_heat_production", 0.0)  # kW/year
+                total_production_kw += annual_production
+            
+            # Convert to design load
+            if operating_hours and operating_hours > 0:
+                design_load_kw = total_production_kw / operating_hours
+            else:
+                design_load_kw = total_production_kw / 8760.0  # Default annual hours
+            
+            # Calculate mass flow: ṁ = Q / (cp × ΔT)
+            design_load_w = design_load_kw * 1000.0
+            total_mass_flow = design_load_w / (cp * max(1e-6, delta_T))
+            
             if total_mass_flow < min_mass_flow:
                 total_mass_flow = min_mass_flow
-                mass_flow_source = "minimum_clamp"
+                mass_flow_source = "manual_minimum_clamp"
             else:
-                mass_flow_source = "building_load"
+                mass_flow_source = "manual_heat_source_production"
         else:
-            total_mass_flow = 0.0
-            mass_flow_source = "zero"
+            # Demand mode: Calculate from building loads (default behavior)
+            if total_heat_load_w > 0:
+                total_mass_flow = total_heat_load_w / (cp * max(1e-6, delta_T))
+                if total_mass_flow < min_mass_flow:
+                    total_mass_flow = min_mass_flow
+                    mass_flow_source = "demand_minimum_clamp"
+                else:
+                    mass_flow_source = "demand_building_load"
+            else:
+                total_mass_flow = 0.0
+                mass_flow_source = "demand_zero"
         
         circulation_pumps: List[int] = []
         

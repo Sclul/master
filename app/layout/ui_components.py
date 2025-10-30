@@ -78,6 +78,19 @@ def create_control_panel(config=None):
                        id="clear-heat-sources-btn", 
                        className="btn btn-secondary"),  # Unified button class
             html.Div([
+                html.Label("Mass Flow Calculation Mode:", className="form-label"),
+                dcc.RadioItems(
+                    id="mass-flow-mode",
+                    options=[
+                        {'label': ' Demand-matching (auto-calculated from building loads)', 'value': 'demand'},
+                        {'label': ' Manual (based on heat source production)', 'value': 'manual'}
+                    ],
+                    value='demand',
+                    className="form-radio",
+                    style={"marginBottom": "10px"}
+                )
+            ], className="form-group"),
+            html.Div([
                 html.Label("Annual Heat Production (GW/year):", className="form-label"),  # Unified label
                 dcc.Input(
                     id="heat-source-production-input",
@@ -87,7 +100,8 @@ def create_control_panel(config=None):
                     min=0,
                     step=0.001,
                     className="form-input"  # Unified input class
-                )
+                ),
+                html.Div(id="mass-flow-mode-indicator", style={"marginTop": "5px"})
             ], className="form-group"),  # Unified form group
             html.Div(id="heat-source-status", className="status-display"),  # Unified status
             html.Div(id="heat-source-summary", className="summary-display")  # Unified summary

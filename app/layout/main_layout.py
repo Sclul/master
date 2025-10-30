@@ -42,6 +42,7 @@ def create_layout(config=None):
             dcc.Store(id="network-data"),
             dcc.Store(id="heat-sources-data"),
             dcc.Store(id="operating-hours-store"),
+            dcc.Store(id="mass-flow-mode-store", data="demand"),  # Store for mass flow mode
             # Simulation state (UI-only scaffolding)
             dcc.Store(id="sim-params-store"),
             dcc.Store(id="sim-results-store"),

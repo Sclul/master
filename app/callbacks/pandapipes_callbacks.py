@@ -28,11 +28,12 @@ class PandapipesCallbacks(BaseCallback):
             ],
             [
                 Input("sim-init-btn", "n_clicks"),
-                Input("operating-hours-store", "data")
+                Input("operating-hours-store", "data"),
+                Input("mass-flow-mode-store", "data")
             ],
             prevent_initial_call=True
         )
-        def on_sim_init(n_clicks, operating_hours):
+        def on_sim_init(n_clicks, operating_hours, mass_flow_mode):
             """Handle Initialize Net button: build pandapipes net from GraphML and summarize."""
             try:
                 if not n_clicks:
@@ -45,7 +46,10 @@ class PandapipesCallbacks(BaseCallback):
                 progress_tracker.start("Initializing pandapipes net...")
 
                 builder = PandapipesBuilder(self.config)
-                result = builder.build_from_graphml(operating_hours=operating_hours)
+                
+                # Use demand mode as default if not specified
+                mode = mass_flow_mode if mass_flow_mode else "demand"
+                result = builder.build_from_graphml(operating_hours=operating_hours, mass_flow_mode=mode)
 
                 progress_tracker.complete("Pandapipes net created")
 

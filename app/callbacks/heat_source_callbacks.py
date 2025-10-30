@@ -153,3 +153,28 @@ class HeatSourceCallbacks(BaseCallback):
                     ])
             else:
                 return html.Div(f"{summary.get('message', 'Error getting summary')}", className="error-message")
+        
+        @self.app.callback(
+            [
+                Output("mass-flow-mode-indicator", "children"),
+                Output("mass-flow-mode-store", "data")
+            ],
+            Input("mass-flow-mode", "value"),
+            prevent_initial_call=False
+        )
+        def update_mass_flow_mode_indicator(mode):
+            """Update the mode indicator based on selected mode."""
+            if mode == "demand":
+                indicator = html.Div([
+                    html.Span("✓ ", style={"color": "#28a745", "fontWeight": "bold"}),
+                    html.Span("Mass flow auto-calculated from total building loads", 
+                             style={"fontSize": "0.85em", "color": "#666", "fontStyle": "italic"})
+                ], style={"padding": "5px", "backgroundColor": "#f8f9fa", "borderRadius": "3px"})
+            else:  # manual mode
+                indicator = html.Div([
+                    html.Span("⚙ ", style={"color": "#007bff", "fontWeight": "bold"}),
+                    html.Span("Mass flow calculated from heat source production values", 
+                             style={"fontSize": "0.85em", "color": "#666", "fontStyle": "italic"})
+                ], style={"padding": "5px", "backgroundColor": "#e7f3ff", "borderRadius": "3px"})
+            
+            return indicator, mode
