@@ -202,11 +202,108 @@ body {
     color: white;
 }
 
-/* Section Header with Step */
+/* ===== COLLAPSIBLE SECTION SYSTEM ===== */
+
+/* Control Section Container */
+.control-section {
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: var(--transition-base);
+    background: white;
+}
+
+.control-section.active {
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 2px var(--primary-100);
+}
+
+/* Section Header - Always visible, clickable */
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--gray-50);
+    cursor: pointer;
+    user-select: none;
+    transition: var(--transition-fast);
+    border-bottom: 1px solid transparent;
+}
+
+.section-header:hover:not(.locked) {
+    background: var(--gray-100);
+}
+
+.section-header.locked {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.section-header.active {
+    background: var(--primary-50);
+    border-bottom-color: var(--gray-200);
+}
+
+/* Header Content */
+.section-header-content {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.section-header-content .step-text {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+.section-header.locked .section-header-content .step-text {
+    color: var(--gray-500);
+}
+
+/* Collapse Indicator */
+.collapse-icon {
+    font-size: 1rem;
+    color: var(--gray-500);
+    transition: transform var(--transition-fast);
+    line-height: 1;
+}
+
+.section-header.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+.section-header.locked .collapse-icon {
+    opacity: 0.4;
+}
+
+/* Section Body - Collapsible */
+.section-body {
+    padding: 1rem;
+    max-height: 2000px;
+    overflow: visible;
+    transition: max-height var(--transition-base) ease-out,
+                padding var(--transition-base) ease-out,
+                opacity var(--transition-fast) ease-out;
+    opacity: 1;
+}
+
+.section-body.collapsed {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    overflow: hidden;
+}
+
+/* Legacy h4 support inside sections - now inside headers */
 .control-section h4 {
     display: flex;
     align-items: center;
-    margin-bottom: 1rem;
+    margin: 0;
 }
 
 .control-section h4 .step-text {
@@ -215,8 +312,7 @@ body {
 
 /* Locked Section Styling */
 .control-section.locked {
-    opacity: 0.6;
-    pointer-events: none;
+    opacity: 0.8;
 }
 
 .control-section.locked .btn {
@@ -224,6 +320,10 @@ body {
     border-color: var(--gray-300);
     color: var(--gray-500);
     cursor: not-allowed;
+}
+
+.control-section.locked .section-body {
+    pointer-events: none;
 }
 
 /* Locked Status Panel (right sidebar) */
