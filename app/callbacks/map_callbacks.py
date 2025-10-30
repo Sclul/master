@@ -117,8 +117,8 @@ class MapCallbacks(BaseCallback):
             State("layer-toggles", "value"),
             prevent_initial_call=True
         )
-        def auto_enable_network_layers(network_data, current_selected_layers):
-            """Auto-enable network layers when network is generated or optimized."""
+        def manage_network_layers(network_data, current_selected_layers):
+            """Auto-enable network layers and disable streets when network is generated or optimized."""
             if not network_data or not isinstance(network_data, dict):
                 return no_update
             
@@ -134,10 +134,17 @@ class MapCallbacks(BaseCallback):
                         logger.info("Auto-enabling filtered network layer after successful network optimization")
                         return updated_layers
                 else:
-                    # Otherwise, enable regular network layer
+                    # Otherwise, enable regular network layer and disable streets
+                    changes_made = False
                     if "network" not in updated_layers:
                         updated_layers.append("network")
                         logger.info("Auto-enabling network layer after successful network generation")
+                        changes_made = True
+                    if "streets" in updated_layers:
+                        updated_layers.remove("streets")
+                        logger.info("Auto-disabling streets layer after successful network generation")
+                        changes_made = True
+                    if changes_made:
                         return updated_layers
             
             return no_update
@@ -171,16 +178,47 @@ class MapCallbacks(BaseCallback):
         )
         def auto_enable_heat_sources_layer(heat_sources_data, current_selected_layers):
             """Auto-enable heat sources layer when a heat source is added."""
-            if not heat_sources_data or not isinstance(heat_sources_data, dict):
+            if heat_sources_data is None:
                 return no_update
             
-            # Auto-enable when a heat source is added (indicated by "updated" or "timestamp")
-            if heat_sources_data.get("updated") or heat_sources_data.get("timestamp"):
+            # Auto-enable when heat sources exist (list is not empty)
+            # heat_sources_data is a list of heat source dicts
+            if isinstance(heat_sources_data, list) and len(heat_sources_data) > 0:
                 updated_layers = (current_selected_layers or []).copy()
                 if "heat_sources" not in updated_layers:
                     updated_layers.append("heat_sources")
                     logger.info("Auto-enabling heat sources layer after heat source creation")
                     return updated_layers
+            
+            return no_update
+
+        @self.app.callback(
+            Output("layer-toggles", "value", allow_duplicate=True),
+            Input("sim-run-state-store", "data"),
+            State("layer-toggles", "value"),
+            prevent_initial_call=True
+        )
+        def switch_to_supply_temp_after_pipeflow(pipeflow_state, current_selected_layers):
+            """Switch to supply temperature layer when pipeflow completes successfully."""
+            if not pipeflow_state or not isinstance(pipeflow_state, dict):
+                return no_update
+            
+            # Check if pipeflow just completed successfully
+            if pipeflow_state.get("completed") and pipeflow_state.get("converged"):
+                updated_layers = (current_selected_layers or []).copy()
+                
+                # Remove network layers
+                if "network" in updated_layers:
+                    updated_layers.remove("network")
+                if "filtered_network" in updated_layers:
+                    updated_layers.remove("filtered_network")
+                
+                # Enable only supply_temp if not already enabled
+                if "supply_temp" not in updated_layers:
+                    updated_layers.append("supply_temp")
+                
+                logger.info("Auto-switching to supply temperature layer after successful pipeflow")
+                return updated_layers
             
             return no_update
 

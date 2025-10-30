@@ -89,7 +89,8 @@ class PandapipesCallbacks(BaseCallback):
         @self.app.callback(
             [
                 Output("sim-status", "children"),
-                Output("sim-summary", "children")
+                Output("sim-summary", "children"),
+                Output("sim-run-state-store", "data")
             ],
             Input("sim-run-btn", "n_clicks"),
             prevent_initial_call=True
@@ -98,7 +99,7 @@ class PandapipesCallbacks(BaseCallback):
             """Run pandapipes pipeflow on last-built network and summarize."""
             try:
                 if not n_clicks:
-                    return "", ""
+                    return "", "", None
 
                 from pandapipes_builder import PandapipesBuilder  # type: ignore
                 from utils.progress_tracker import progress_tracker  # type: ignore
@@ -146,7 +147,15 @@ class PandapipesCallbacks(BaseCallback):
                 ], className="summary-display")
 
                 logger.info(f"Pipeflow run summary: {result}")
-                return status, summary
+                
+                # Store pipeflow completion state
+                pipeflow_state = {
+                    "completed": True,
+                    "converged": result.get("converged", True),
+                    "timestamp": n_clicks
+                }
+                
+                return status, summary, pipeflow_state
             except Exception as e:
                 logger.exception("Error in pipeflow run callback")
-                return html.Div(f"Pipeflow failed: {e}", className="error-message"), ""
+                return html.Div(f"Pipeflow failed: {e}", className="error-message"), "", None
