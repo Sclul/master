@@ -24,4 +24,4 @@ app/templates/*.compiled
 .vscode
 .github
 
-ToDo
+docs

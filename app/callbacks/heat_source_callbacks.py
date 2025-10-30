@@ -59,6 +59,22 @@ class HeatSourceCallbacks(BaseCallback):
             # Get updated summary
             summary = self.heat_source_handler.get_heat_sources_summary()
             
+            # Load all heat sources for the store
+            heat_sources_gdf = self.heat_source_handler.load_heat_sources()
+            heat_sources_list = []
+            if not heat_sources_gdf.empty:
+                # Convert to list of dicts for the store
+                # Need to convert geometry to JSON-serializable format
+                for idx, row in heat_sources_gdf.iterrows():
+                    source_dict = {
+                        'id': row['id'],
+                        'annual_heat_production': float(row['annual_heat_production']),
+                        'heat_source_type': row['heat_source_type'],
+                        'latitude': row.geometry.y,
+                        'longitude': row.geometry.x
+                    }
+                    heat_sources_list.append(source_dict)
+            
             if result.get("status") == "success":
                 status_msg = html.Div([
                     html.P(f"{result['message']}", className="success-message"),
@@ -69,6 +85,7 @@ class HeatSourceCallbacks(BaseCallback):
                 # Convert total production from kW to GW for display
                 total_production_gw = summary.get('total_production', 0) / 1_000_000
                 summary_msg = html.Div([
+                    html.H4("Heat Source Summary", className="summary-title"),
                     html.P(f"Total Sources: {summary.get('total_count', 0)}", className="info-message"),
                     html.P(f"Total Production: {total_production_gw:.3f} GW/year", className="info-message")
                 ])
@@ -76,7 +93,7 @@ class HeatSourceCallbacks(BaseCallback):
                 # Reset heat source mode after successful placement
                 self._heat_source_mode = False
                 
-                return status_msg, summary_msg, {"updated": True, "timestamp": result.get("heat_source_id")}
+                return status_msg, summary_msg, heat_sources_list
             else:
                 error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
                 return error_msg, no_update, no_update
@@ -115,12 +132,15 @@ class HeatSourceCallbacks(BaseCallback):
             
             if result.get("status") == "success":
                 status_msg = html.Div(f"{result['message']}", className="success-message")
-                summary_msg = html.Div("No heat sources", className="info-message")
+                summary_msg = html.Div([
+                    html.H4("Heat Source Summary", className="summary-title"),
+                    html.P("No heat sources", className="info-message")
+                ])
                 
                 # Reset heat source mode
                 self._heat_source_mode = False
                 
-                return status_msg, summary_msg, {"cleared": True, "timestamp": n_clicks}
+                return status_msg, summary_msg, []  # Return empty list
             else:
                 error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
                 return error_msg, no_update, no_update

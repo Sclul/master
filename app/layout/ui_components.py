@@ -41,9 +41,12 @@ def create_control_panel(config=None):
         
         html.H3("Controls"),
         
-        # Measurement tools - Updated with unified classes
+        # STEP 1: Area Selection
         html.Section([
-            html.H4("Area Selection"),
+            html.H4([
+                html.Span("1", className="step-number", id="step-1-badge"),
+                html.Span("Area Selection", className="step-text")
+            ]),
             html.Button("Draw Analysis Area", 
                        id="start-measurement-btn", 
                        className="btn btn-primary"),  # Unified button class
@@ -66,17 +69,22 @@ def create_control_panel(config=None):
                 html.H4("Data Summary", style={"margin-top": "1rem"}),
                 html.Div(id="data-summary", className="summary-display")  # Unified summary class
             ])
-        ], className="control-section"),  # Unified section class
+        ], id="section-area-selection", className="control-section"),  # Unified section class
         
-        # Heat source placement - Updated with unified classes
+        # STEP 2: Heat Sources
         html.Section([
-            html.H4("Heat Sources"),
+            html.H4([
+                html.Span("2", className="step-number", id="step-2-badge"),
+                html.Span("Heat Sources", className="step-text")
+            ]),
             html.Button("Add Heat Source", 
                        id="add-heat-source-btn", 
-                       className="btn btn-secondary"),  # Unified button class
+                       className="btn btn-secondary",
+                       disabled=True),  # Initially disabled
             html.Button("Clear Heat Sources", 
                        id="clear-heat-sources-btn", 
-                       className="btn btn-secondary"),  # Unified button class
+                       className="btn btn-secondary",
+                       disabled=True),  # Initially disabled
             html.Div([
                 html.Label("Mass Flow Calculation Mode:", className="form-label"),
                 dcc.RadioItems(
@@ -105,61 +113,20 @@ def create_control_panel(config=None):
             ], className="form-group"),  # Unified form group
             html.Div(id="heat-source-status", className="status-display"),  # Unified status
             html.Div(id="heat-source-summary", className="summary-display")  # Unified summary
-        ], className="control-section"),  # Unified section class
+        ], id="section-heat-sources", className="control-section locked"),  # Initially locked
         
-        # Network generation - Updated with unified classes
+        # STEP 3: Building Filters (OPTIONAL)
         html.Section([
-            html.H4("District Heating Network"),
-            html.Button("Generate Network", 
-                       id="generate-network-btn", 
-                       className="btn btn-primary"),  # Unified button class
-            html.Div(id="network-status", className="status-display")  # Unified status
-        ], className="control-section"),  # Unified section class
-        
-        # Graph optimization - Updated with unified classes
-        html.Section([
-            html.H4("Graph Optimization"),
-            html.Button("Optimize Network", 
-                       id="optimize-network-btn", 
-                       className="btn btn-primary"),  # Unified button class
-            html.Div(id="network-optimization-status", className="status-display"),  # Unified status
-            
-            html.Div([
-                html.Label("Max Building Connection Distance (m):", className="form-label"),  # Unified label
-                dcc.Input(
-                    id="max-building-connection-input",
-                    type="number",
-                    placeholder="e.g., 100",
-                    value=config.graph_filters.get("max_building_connection_distance", 100.0) if config else 100.0,
-                    min=0,
-                    className="form-input"  # Unified input class
-                )
-            ], className="form-group"),  # Unified form group
-            
-            html.Div([
-                html.Label("Network Optimization:", className="form-label"),  # Unified label
-                dcc.Dropdown(
-                    id="pruning-algorithm-dropdown",
-                    options=[
-                        {"label": "None", "value": "none"},
-                        {"label": "Minimum Spanning Tree", "value": "minimum_spanning_tree"},
-                        {"label": "All Building Connections", "value": "all_building_connections"},
-                        {"label": "Steiner Tree", "value": "steiner_tree"}
-                    ],
-                    value=config.graph_filters.get("default_pruning_algorithm", "none") if config else "none",
-                    multi=False,  # Ensure single selection only
-                    className="form-dropdown"  # Unified dropdown class
-                )
-            ], className="form-group")  # Unified form group
-        ], className="control-section"),  # Unified section class
-        
-        # Building & Heat Demand Filters - Combined section with unified classes
-        html.Section([
-            html.H4("Building & Heat Demand Filters"),
+            html.H4([
+                html.Span("3", className="step-number", id="step-3-badge"),
+                html.Span("Building Filters", className="step-text"),
+                html.Span("(optional)", className="step-optional")
+            ]),
             
             html.Button("Apply Filters", 
                        id="apply-filters-btn", 
-                       className="btn btn-primary"),  # Unified button class
+                       className="btn btn-primary",
+                       disabled=True),  # Initially disabled
             html.Div(id="filter-status", className="status-display"),  # Unified status
             
             # Heat Demand Filters Subsection
@@ -244,7 +211,62 @@ def create_control_panel(config=None):
                     )
                 ], className="form-group"),  # Unified form group
             ])
-        ], className="control-section"),  # Unified section class
+        ], id="section-building-filters", className="control-section locked"),  # Initially locked
+        
+        # STEP 4: Network Generation
+        html.Section([
+            html.H4([
+                html.Span("4", className="step-number", id="step-4-badge"),
+                html.Span("District Heating Network", className="step-text")
+            ]),
+            html.Button("Generate Network", 
+                       id="generate-network-btn", 
+                       className="btn btn-primary",
+                       disabled=True),  # Initially disabled
+            html.Div(id="network-status", className="status-display")  # Unified status
+        ], id="section-network-generation", className="control-section locked"),  # Initially locked
+        
+        # STEP 5: Graph Optimization (OPTIONAL)
+        html.Section([
+            html.H4([
+                html.Span("5", className="step-number", id="step-5-badge"),
+                html.Span("Graph Optimization", className="step-text"),
+                html.Span("(optional)", className="step-optional")
+            ]),
+            html.Button("Optimize Network", 
+                       id="optimize-network-btn", 
+                       className="btn btn-primary",
+                       disabled=True),  # Initially disabled
+            html.Div(id="network-optimization-status", className="status-display"),  # Unified status
+            
+            html.Div([
+                html.Label("Max Building Connection Distance (m):", className="form-label"),  # Unified label
+                dcc.Input(
+                    id="max-building-connection-input",
+                    type="number",
+                    placeholder="e.g., 100",
+                    value=config.graph_filters.get("max_building_connection_distance", 100.0) if config else 100.0,
+                    min=0,
+                    className="form-input"  # Unified input class
+                )
+            ], className="form-group"),  # Unified form group
+            
+            html.Div([
+                html.Label("Network Optimization:", className="form-label"),  # Unified label
+                dcc.Dropdown(
+                    id="pruning-algorithm-dropdown",
+                    options=[
+                        {"label": "None", "value": "none"},
+                        {"label": "Minimum Spanning Tree", "value": "minimum_spanning_tree"},
+                        {"label": "All Building Connections", "value": "all_building_connections"},
+                        {"label": "Steiner Tree", "value": "steiner_tree"}
+                    ],
+                    value=config.graph_filters.get("default_pruning_algorithm", "none") if config else "none",
+                    multi=False,  # Ensure single selection only
+                    className="form-dropdown"  # Unified dropdown class
+                )
+            ], className="form-group")  # Unified form group
+        ], id="section-graph-optimization", className="control-section locked"),  # Initially locked
 
     ], className="control-panel")
 
@@ -252,15 +274,19 @@ def create_control_panel(config=None):
 def create_status_panel():
     """Create a clean status panel."""
     return html.Div([
-        html.H3("Pandapipes Simulation"),
+        # STEP 6: Hydraulic Simulation
+        html.H3([
+            html.Span("6", className="step-number", id="step-6-badge", style={"marginRight": "0.5rem"}),
+            html.Span("Pandapipes Simulation")
+        ]),
 
         # Minimal controls for initialization only
         html.Div([
-            html.Button("Initialize Net", id="sim-init-btn", className="btn btn-secondary"),
-            html.Button("Run Pipeflow", id="sim-run-btn", className="btn btn-primary")
+            html.Button("Initialize Net", id="sim-init-btn", className="btn btn-secondary", disabled=True),
+            html.Button("Run Pipeflow", id="sim-run-btn", className="btn btn-primary", disabled=True)
         ], className="button-group"),
 
         # Status + summary placeholders
         html.Div(id="sim-status", className="status-display"),
         html.Div(id="sim-summary", className="status-display"),
-    ], className="status-panel")
+    ], id="section-simulation", className="status-panel locked")  # Initially locked

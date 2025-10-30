@@ -7,6 +7,7 @@ from .network_callbacks import NetworkCallbacks
 from .heat_source_callbacks import HeatSourceCallbacks
 from .progress_callbacks import ProgressCallbacks
 from .pandapipes_callbacks import PandapipesCallbacks
+from .pipeline_state_callbacks import PipelineStateCallbacks
 
 logger = logging.getLogger(__name__)
 
@@ -27,5 +28,6 @@ class CallbackManager:
         self.heat_source = HeatSourceCallbacks(app, config)
         self.progress = ProgressCallbacks(app, config)
         self.pandapipes = PandapipesCallbacks(app, config)
+        self.pipeline_state = PipelineStateCallbacks(app, config)
         
         logger.info("Essential callback modules initialized")

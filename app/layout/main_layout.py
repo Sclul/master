@@ -43,6 +43,15 @@ def create_layout(config=None):
             dcc.Store(id="heat-sources-data"),
             dcc.Store(id="operating-hours-store"),
             dcc.Store(id="mass-flow-mode-store", data="demand"),  # Store for mass flow mode
+            # Pipeline state tracking
+            dcc.Store(id="pipeline-state-store", data={
+                'area_selection': False,
+                'heat_sources': False,
+                'building_filters': False,
+                'network_generation': False,
+                'graph_optimization': False,
+                'simulation': False
+            }),
             # Simulation state (UI-only scaffolding)
             dcc.Store(id="sim-params-store"),
             dcc.Store(id="sim-results-store"),
@@ -54,6 +63,12 @@ def create_layout(config=None):
                 interval=500,  # Update every 500ms
                 n_intervals=0,
                 disabled=False  # Always enabled
+            ),
+            # State detection trigger
+            dcc.Interval(
+                id='init-state-check',
+                interval=1000,  # 1 second after load
+                max_intervals=1  # Only fire once
             )
         ], style={"display": "none"})
     ], className="app-container")

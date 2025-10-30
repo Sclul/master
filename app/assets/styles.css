@@ -174,6 +174,81 @@ body {
     overflow-y: auto;
 }
 
+/* ===== WORKFLOW STEP INDICATORS ===== */
+
+/* Step Number Badge */
+.step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--gray-300);
+    color: var(--gray-600);
+    border-radius: 50%;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+
+.step-number.completed {
+    background: var(--success-500);
+    color: white;
+}
+
+.step-number.active {
+    background: var(--primary-500);
+    color: white;
+}
+
+/* Section Header with Step */
+.control-section h4 {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.control-section h4 .step-text {
+    flex: 1;
+}
+
+/* Locked Section Styling */
+.control-section.locked {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.control-section.locked .btn {
+    background: var(--gray-300);
+    border-color: var(--gray-300);
+    color: var(--gray-500);
+    cursor: not-allowed;
+}
+
+/* Locked Status Panel (right sidebar) */
+.status-panel.locked {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.status-panel.locked .btn {
+    background: var(--gray-300);
+    border-color: var(--gray-300);
+    color: var(--gray-500);
+    cursor: not-allowed;
+}
+
+/* Optional Step Indicator */
+.step-optional {
+    display: inline-block;
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    font-weight: normal;
+    font-style: italic;
+}
+
 .control-panel-content {
     padding: var(--space-6);
 }
