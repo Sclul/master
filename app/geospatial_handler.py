@@ -43,7 +43,7 @@ class GeospatialHandler:
         
         
     def clear_data_directory(self) -> Dict[str, Any]:
-        """Clear all files in the data directory."""
+        """Clear all files in the data directory and pandapipes subdirectory."""
         try:
             if self.data_dir.exists():
                 # Remove all files
@@ -52,6 +52,9 @@ class GeospatialHandler:
                         item.unlink()
                         logger.debug(f"Removed file: {item}")
 
+                # Also clear pandapipes subdirectory
+                pandapipes_result = self.clear_pandapipes_directory()
+                logger.debug(f"Pandapipes clearing result: {pandapipes_result}")
                 
                 logger.info(f"Data directory cleared: {self.data_dir}")
                 return {"status": "success", "message": f"Data directory {self.data_dir} cleared"}

@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from dash import Output, Input, State, html
+from dash import Output, Input, State, html, no_update
 from dash.exceptions import PreventUpdate
 from callbacks.base_callback import BaseCallback
 
@@ -51,17 +51,27 @@ class PipelineStateCallbacks(BaseCallback):
             
             # STEP 1: Area Selection - check if buildings.geojson exists
             buildings_path = Path(self.data_paths.get("buildings_geojson_path", "./data/buildings.geojson"))
+            buildings_exist = False
             if buildings_path.exists():
                 try:
                     # Check if file has content
                     if buildings_path.stat().st_size > 100:  # More than just empty structure
                         current_state['area_selection'] = True
+                        buildings_exist = True
                 except Exception as e:
                     logger.debug(f"Error checking buildings file: {e}")
+            else:
+                # If buildings don't exist, reset all downstream steps
+                current_state['area_selection'] = False
             
             # STEP 2: Heat Sources - check if any sources in store
+            heat_sources_exist = False
             if heat_sources and isinstance(heat_sources, list) and len(heat_sources) > 0:
                 current_state['heat_sources'] = True
+                heat_sources_exist = True
+            else:
+                # If no heat sources, reset all downstream steps
+                current_state['heat_sources'] = False
             
             # STEP 3: Building Filters - mark complete after first filter application
             # Check if filter_status has content (indicates filters were applied)
@@ -69,30 +79,57 @@ class PipelineStateCallbacks(BaseCallback):
                 current_state['building_filters'] = True
             
             # STEP 4: Network Generation - check if graphml exists
+            # Only check if previous required steps are complete
             network_path = Path(self.data_paths.get("network_graphml_path", "./data/heating_network.graphml"))
-            if network_path.exists():
-                try:
-                    if network_path.stat().st_size > 100:
-                        current_state['network_generation'] = True
-                except Exception as e:
-                    logger.debug(f"Error checking network file: {e}")
+            network_exists = False
+            if buildings_exist and heat_sources_exist:
+                if network_path.exists():
+                    try:
+                        if network_path.stat().st_size > 100:
+                            current_state['network_generation'] = True
+                            network_exists = True
+                    except Exception as e:
+                        logger.debug(f"Error checking network file: {e}")
+                else:
+                    current_state['network_generation'] = False
+            else:
+                # Prerequisites not met, reset this and downstream steps
+                current_state['network_generation'] = False
             
             # STEP 5: Graph Optimization - check if filtered graphml exists
+            # Only check if Step 4 is complete
             filtered_path = Path(self.data_paths.get("filtered_network_graphml_path", "./data/filtered_heating_network.graphml"))
-            if filtered_path.exists():
-                try:
-                    if filtered_path.stat().st_size > 100:
-                        current_state['graph_optimization'] = True
-                except Exception as e:
-                    logger.debug(f"Error checking filtered network file: {e}")
+            optimization_exists = False
+            if network_exists:
+                if filtered_path.exists():
+                    try:
+                        if filtered_path.stat().st_size > 100:
+                            current_state['graph_optimization'] = True
+                            optimization_exists = True
+                    except Exception as e:
+                        logger.debug(f"Error checking filtered network file: {e}")
+                else:
+                    current_state['graph_optimization'] = False
+            else:
+                # Network doesn't exist, reset this and downstream steps
+                current_state['graph_optimization'] = False
             
             # STEP 6: Simulation - check if pandapipes results exist
-            results_path = Path(self.data_paths.get("pandapipes_results_path", "./data/pandapipes"))
-            if results_path.exists() and results_path.is_dir():
-                # Check for any CSV files in the results directory
-                csv_files = list(results_path.glob("*.csv"))
-                if csv_files:
-                    current_state['simulation'] = True
+            # Only check if Step 4 is complete (Step 5 is optional)
+            if network_exists:
+                results_path = Path(self.data_paths.get("pandapipes_results_path", "./data/pandapipes"))
+                if results_path.exists() and results_path.is_dir():
+                    # Check for any CSV files in the results directory
+                    csv_files = list(results_path.glob("*.csv"))
+                    if csv_files:
+                        current_state['simulation'] = True
+                    else:
+                        current_state['simulation'] = False
+                else:
+                    current_state['simulation'] = False
+            else:
+                # Network doesn't exist, reset simulation
+                current_state['simulation'] = False
             
             logger.debug(f"Updated pipeline state: {current_state}")
             return current_state
@@ -323,8 +360,8 @@ class PipelineStateCallbacks(BaseCallback):
             step2_content = "✓" if step2_complete else "2"
             step2_class = "step-number completed" if step2_complete else "step-number"
             
-            # Step 3: Filters (optional)
-            step3_complete = state.get('building_filters', False)
+            # Step 3: Filters (optional) - mark complete if explicitly done OR if step 4 is complete
+            step3_complete = state.get('building_filters', False) or state.get('network_generation', False)
             step3_content = "✓" if step3_complete else "3"
             step3_class = "step-number completed" if step3_complete else "step-number"
             
@@ -333,8 +370,8 @@ class PipelineStateCallbacks(BaseCallback):
             step4_content = "✓" if step4_complete else "4"
             step4_class = "step-number completed" if step4_complete else "step-number"
             
-            # Step 5: Optimization (optional)
-            step5_complete = state.get('graph_optimization', False)
+            # Step 5: Optimization (optional) - mark complete if explicitly done OR if step 6 is complete
+            step5_complete = state.get('graph_optimization', False) or state.get('simulation', False)
             step5_content = "✓" if step5_complete else "5"
             step5_class = "step-number completed" if step5_complete else "step-number"
             
@@ -370,4 +407,215 @@ class PipelineStateCallbacks(BaseCallback):
                     'graph_optimization': False,
                     'simulation': False
                 }
+            raise PreventUpdate
+        
+        # Reset downstream steps when adding/clearing heat sources (Step 2)
+        @self.app.callback(
+            Output('pipeline-state-store', 'data', allow_duplicate=True),
+            [
+                Input('add-heat-source-btn', 'n_clicks'),
+                Input('clear-heat-sources-btn', 'n_clicks')
+            ],
+            State('pipeline-state-store', 'data'),
+            prevent_initial_call=True
+        )
+        def reset_downstream_on_heat_source_change(add_clicks, clear_clicks, current_state):
+            """Reset steps 3-6 when heat sources are modified."""
+            if (add_clicks and add_clicks > 0) or (clear_clicks and clear_clicks > 0):
+                if current_state:
+                    # Keep steps 1-2, reset 3-6
+                    logger.info("Resetting downstream steps - heat sources modified")
+                    return {
+                        'area_selection': current_state.get('area_selection', False),
+                        'heat_sources': current_state.get('heat_sources', False),
+                        'building_filters': False,
+                        'network_generation': False,
+                        'graph_optimization': False,
+                        'simulation': False
+                    }
+            raise PreventUpdate
+        
+        # Reset downstream steps when applying filters (Step 3)
+        @self.app.callback(
+            Output('pipeline-state-store', 'data', allow_duplicate=True),
+            Input('apply-filters-btn', 'n_clicks'),
+            State('pipeline-state-store', 'data'),
+            prevent_initial_call=True
+        )
+        def reset_downstream_on_filter_change(n_clicks, current_state):
+            """Reset steps 4-6 when filters are applied."""
+            if n_clicks and n_clicks > 0:
+                if current_state:
+                    # Keep steps 1-3, reset 4-6
+                    logger.info("Resetting downstream steps - filters applied")
+                    return {
+                        'area_selection': current_state.get('area_selection', False),
+                        'heat_sources': current_state.get('heat_sources', False),
+                        'building_filters': current_state.get('building_filters', False),
+                        'network_generation': False,
+                        'graph_optimization': False,
+                        'simulation': False
+                    }
+            raise PreventUpdate
+        
+        # Reset downstream steps when generating network (Step 4)
+        @self.app.callback(
+            Output('pipeline-state-store', 'data', allow_duplicate=True),
+            Input('generate-network-btn', 'n_clicks'),
+            State('pipeline-state-store', 'data'),
+            prevent_initial_call=True
+        )
+        def reset_downstream_on_network_generation(n_clicks, current_state):
+            """Reset steps 5-6 when network is regenerated."""
+            if n_clicks and n_clicks > 0:
+                if current_state:
+                    # Keep steps 1-4, reset 5-6
+                    logger.info("Resetting downstream steps - network regenerated")
+                    return {
+                        'area_selection': current_state.get('area_selection', False),
+                        'heat_sources': current_state.get('heat_sources', False),
+                        'building_filters': current_state.get('building_filters', False),
+                        'network_generation': current_state.get('network_generation', False),
+                        'graph_optimization': False,
+                        'simulation': False
+                    }
+            raise PreventUpdate
+        
+        # Reset downstream steps when optimizing network (Step 5)
+        @self.app.callback(
+            Output('pipeline-state-store', 'data', allow_duplicate=True),
+            Input('optimize-network-btn', 'n_clicks'),
+            State('pipeline-state-store', 'data'),
+            prevent_initial_call=True
+        )
+        def reset_downstream_on_optimization(n_clicks, current_state):
+            """Reset step 6 when network is optimized."""
+            if n_clicks and n_clicks > 0:
+                if current_state:
+                    # Keep steps 1-5, reset 6
+                    logger.info("Resetting downstream steps - network optimized")
+                    return {
+                        'area_selection': current_state.get('area_selection', False),
+                        'heat_sources': current_state.get('heat_sources', False),
+                        'building_filters': current_state.get('building_filters', False),
+                        'network_generation': current_state.get('network_generation', False),
+                        'graph_optimization': current_state.get('graph_optimization', False),
+                        'simulation': False
+                    }
+            raise PreventUpdate
+        
+        # Clear status messages from downstream steps when clicking on earlier steps
+        @self.app.callback(
+            [
+                Output('filter-status', 'children', allow_duplicate=True),
+                Output('network-status', 'children', allow_duplicate=True),
+                Output('network-optimization-status', 'children', allow_duplicate=True),
+                Output('sim-status', 'children', allow_duplicate=True),
+                Output('sim-summary', 'children', allow_duplicate=True),
+                Output('validation-alert', 'style', allow_duplicate=True)
+            ],
+            [
+                Input('start-measurement-btn', 'n_clicks'),  # Step 1
+                Input('add-heat-source-btn', 'n_clicks'),  # Step 2
+                Input('clear-heat-sources-btn', 'n_clicks'),  # Step 2
+                Input('apply-filters-btn', 'n_clicks'),  # Step 3
+                Input('generate-network-btn', 'n_clicks'),  # Step 4
+                Input('optimize-network-btn', 'n_clicks')  # Step 5
+            ],
+            prevent_initial_call=True
+        )
+        def clear_downstream_status_messages(
+            step1_clicks, step2_add_clicks, step2_clear_clicks, 
+            step3_clicks, step4_clicks, step5_clicks
+        ):
+            """Clear status messages from downstream steps when working on earlier steps."""
+            from dash import callback_context
+            
+            if not callback_context.triggered:
+                raise PreventUpdate
+            
+            trigger_id = callback_context.triggered[0]['prop_id'].split('.')[0]
+            
+            # Default: keep all messages (no_update)
+            filter_msg = no_update
+            network_msg = no_update
+            optimization_msg = no_update
+            sim_msg = no_update
+            sim_summary_msg = no_update
+            validation_style = no_update
+            
+            # Step 1: Clear ALL downstream messages (steps 3-6)
+            if trigger_id == 'start-measurement-btn':
+                logger.info("Step 1 clicked - clearing messages from steps 3-6")
+                filter_msg = ""
+                network_msg = ""
+                optimization_msg = ""
+                sim_msg = ""
+                sim_summary_msg = ""
+                validation_style = {'display': 'none'}
+            
+            # Step 2: Clear messages from steps 3-6
+            elif trigger_id in ['add-heat-source-btn', 'clear-heat-sources-btn']:
+                logger.info("Step 2 clicked - clearing messages from steps 3-6")
+                filter_msg = ""
+                network_msg = ""
+                optimization_msg = ""
+                sim_msg = ""
+                sim_summary_msg = ""
+                validation_style = {'display': 'none'}
+            
+            # Step 3: Clear messages from steps 4-6
+            elif trigger_id == 'apply-filters-btn':
+                logger.info("Step 3 clicked - clearing messages from steps 4-6")
+                network_msg = ""
+                optimization_msg = ""
+                sim_msg = ""
+                sim_summary_msg = ""
+                validation_style = {'display': 'none'}
+            
+            # Step 4: Clear messages from steps 5-6
+            elif trigger_id == 'generate-network-btn':
+                logger.info("Step 4 clicked - clearing messages from steps 5-6")
+                optimization_msg = ""
+                sim_msg = ""
+                sim_summary_msg = ""
+                validation_style = {'display': 'none'}
+            
+            # Step 5: Clear messages from step 6
+            elif trigger_id == 'optimize-network-btn':
+                logger.info("Step 5 clicked - clearing messages from step 6")
+                sim_msg = ""
+                sim_summary_msg = ""
+                validation_style = {'display': 'none'}
+            
+            return (
+                filter_msg, 
+                network_msg, 
+                optimization_msg, 
+                sim_msg, 
+                sim_summary_msg, 
+                validation_style
+            )
+        
+        # Mark graph optimization as complete when Initialize Net is clicked
+        # This handles the case where step 5 is optional and user goes directly to step 6
+        @self.app.callback(
+            Output('pipeline-state-store', 'data', allow_duplicate=True),
+            Input('sim-init-btn', 'n_clicks'),
+            State('pipeline-state-store', 'data'),
+            prevent_initial_call=True
+        )
+        def mark_optimization_complete_on_init(n_clicks, current_state):
+            """Mark graph optimization as complete when initializing simulation (step 5 is optional)."""
+            if n_clicks and n_clicks > 0:
+                if current_state:
+                    logger.info("Marking graph optimization as complete - simulation initialized")
+                    return {
+                        'area_selection': current_state.get('area_selection', False),
+                        'heat_sources': current_state.get('heat_sources', False),
+                        'building_filters': current_state.get('building_filters', False),
+                        'network_generation': current_state.get('network_generation', False),
+                        'graph_optimization': True,  # Mark as complete
+                        'simulation': current_state.get('simulation', False)
+                    }
             raise PreventUpdate
