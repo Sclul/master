@@ -3,7 +3,7 @@ from dash import dcc # type: ignore
 from dash_extensions.enrich import html # type: ignore
 
 from .map_components import create_map_component
-from .ui_components import create_control_panel, create_status_panel
+from .ui_components import create_control_panel, create_status_panel, create_progress_modal
 
 
 def create_layout(config=None):
@@ -70,5 +70,8 @@ def create_layout(config=None):
                 interval=1000,  # 1 second after load
                 max_intervals=1  # Only fire once
             )
-        ], style={"display": "none"})
+        ], style={"display": "none"}),
+        
+        # Progress modal - bottom sheet (no dimming)
+        create_progress_modal()
     ], className="app-container")

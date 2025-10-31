@@ -10,6 +10,7 @@ from dash import html # type: ignore
 from .base_callback import BaseCallback
 from network_constructor import NetworkConstructor
 from heat_source_handler import HeatSourceHandler
+from utils.status_messages import status_message
 
 logger = logging.getLogger(__name__)
 
@@ -50,37 +51,27 @@ class MapCallbacks(BaseCallback):
             
             logger.info(f"Updating layers: streets={show_streets}, buildings={show_buildings}, filtered={show_filtered}, network={show_network}, filtered_network={show_filtered_network}")
             
-            network_status = ""
+            network_status = no_update  # Don't clear status by default
             
             # If network layer is requested, ensure GeoJSON exists
             if show_network:
                 conversion_result = self._ensure_network_geojson_exists()
-                if conversion_result:
-                    if conversion_result.get("converted"):
-                        network_status = html.Div([
-                            html.P("Network converted from GraphML to GeoJSON", className="success-message"),
-                            html.P(f"Features: {conversion_result.get('total_features', 0)}", className="info-message")
-                        ])
-                    elif conversion_result.get("error"):
-                        network_status = html.Div(
-                            f"Network conversion error: {conversion_result.get('message')}", 
-                            className="error-message"
-                        )
+                # Only show status if there's an error (don't show success message for routine conversion)
+                if conversion_result and conversion_result.get("error"):
+                    network_status = status_message.error(
+                        "Network conversion error",
+                        details=conversion_result.get('message')
+                    )
             
             # If filtered network layer is requested, ensure GeoJSON exists
             if show_filtered_network:
                 conversion_result = self._ensure_filtered_network_geojson_exists()
-                if conversion_result:
-                    if conversion_result.get("converted"):
-                        network_status = html.Div([
-                            html.P("Filtered Network converted from GraphML to GeoJSON", className="success-message"),
-                            html.P(f"Features: {conversion_result.get('total_features', 0)}", className="info-message")
-                        ])
-                    elif conversion_result.get("error"):
-                        network_status = html.Div(
-                            f"Filtered Network conversion error: {conversion_result.get('message')}", 
-                            className="error-message"
-                        )
+                # Only show status if there's an error (don't show success message for routine conversion)
+                if conversion_result and conversion_result.get("error"):
+                    network_status = status_message.error(
+                        "Filtered Network conversion error",
+                        details=conversion_result.get('message')
+                    )
             
             layers = self._build_data_layers(
                 show_streets, show_buildings, show_filtered, show_network, show_filtered_network, 

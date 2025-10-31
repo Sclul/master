@@ -1,5 +1,284 @@
 """Clean, minimal UI components."""
 from dash import dcc, html # type: ignore
+from typing import Optional, Any, Dict, List, Union
+
+
+def create_metric_card(
+    label: str,
+    value: Any,
+    unit: str = "",
+    icon: Optional[str] = None,
+    card_class: str = "metric-card"
+) -> html.Div:
+    """Create a structured metric card with consistent styling.
+    
+    Args:
+        label: Metric label text
+        value: Metric value (number, string, or formatted component)
+        unit: Optional unit suffix (e.g., "kW", "nodes")
+        icon: Optional emoji/unicode icon
+        card_class: CSS class for styling variants
+    
+    Returns:
+        Styled metric card component
+    """
+    icon_element = html.Span(icon, className="metric-icon") if icon else None
+    
+    # Format value display
+    if isinstance(value, (int, float)):
+        if isinstance(value, float) and value >= 1000:
+            value_str = f"{value:,.1f}"
+        elif isinstance(value, float):
+            value_str = f"{value:.2f}"
+        else:
+            value_str = f"{value:,}"
+    else:
+        value_str = str(value)
+    
+    # Add unit if provided
+    value_display = f"{value_str} {unit}" if unit else value_str
+    
+    return html.Div(
+        className=card_class,
+        children=[
+            html.Div(className="metric-content", children=[
+                icon_element,
+                html.Div(className="metric-text", children=[
+                    html.Div(label, className="metric-label"),
+                    html.Div(value_display, className="metric-value")
+                ])
+            ])
+        ]
+    )
+
+
+def create_reduction_metric(
+    label: str,
+    before: Union[int, float],
+    after: Union[int, float],
+    unit: str = "",
+    icon: Optional[str] = None
+) -> html.Div:
+    """Create a metric card showing before → after reduction with percentage.
+    
+    Args:
+        label: Metric label text
+        before: Original value
+        after: Reduced value
+        unit: Optional unit suffix
+        icon: Optional emoji/unicode icon
+    
+    Returns:
+        Styled reduction metric card
+    """
+    reduction_pct = ((before - after) / before * 100) if before > 0 else 0
+    
+    icon_element = html.Span(icon, className="metric-icon") if icon else None
+    
+    # Format numbers
+    before_str = f"{before:,}" if isinstance(before, int) else f"{before:,.1f}"
+    after_str = f"{after:,}" if isinstance(after, int) else f"{after:,.1f}"
+    
+    return html.Div(
+        className="metric-card metric-card-reduction",
+        children=[
+            html.Div(className="metric-content", children=[
+                icon_element,
+                html.Div(className="metric-text", children=[
+                    html.Div(label, className="metric-label"),
+                    html.Div(
+                        className="metric-value-reduction",
+                        children=[
+                            html.Span(f"{before_str}", className="value-before"),
+                            html.Span(" → ", className="arrow"),
+                            html.Span(f"{after_str}", className="value-after"),
+                            html.Span(f" {unit}" if unit else "", className="unit")
+                        ]
+                    ),
+                    html.Div(f"⬇ {reduction_pct:.1f}% reduction", className="reduction-badge")
+                ])
+            ])
+        ]
+    )
+
+
+def create_range_metric(
+    label: str,
+    min_val: Union[int, float],
+    max_val: Union[int, float],
+    avg_val: Optional[Union[int, float]] = None,
+    unit: str = "",
+    icon: Optional[str] = None
+) -> html.Div:
+    """Create a metric card showing min/max/avg range.
+    
+    Args:
+        label: Metric label text
+        min_val: Minimum value
+        max_val: Maximum value
+        avg_val: Optional average value
+        unit: Unit suffix
+        icon: Optional emoji/unicode icon
+    
+    Returns:
+        Styled range metric card
+    """
+    icon_element = html.Span(icon, className="metric-icon") if icon else None
+    
+    # Format values
+    def fmt(val):
+        if isinstance(val, int):
+            return f"{val:,}"
+        return f"{val:.2f}"
+    
+    range_parts = [
+        html.Div([
+            html.Span("Min: ", className="range-label"),
+            html.Span(f"{fmt(min_val)} {unit}", className="range-value")
+        ], className="range-item"),
+        html.Div([
+            html.Span("Max: ", className="range-label"),
+            html.Span(f"{fmt(max_val)} {unit}", className="range-value")
+        ], className="range-item")
+    ]
+    
+    if avg_val is not None:
+        range_parts.append(
+            html.Div([
+                html.Span("Avg: ", className="range-label"),
+                html.Span(f"{fmt(avg_val)} {unit}", className="range-value")
+            ], className="range-item")
+        )
+    
+    return html.Div(
+        className="metric-card metric-card-range",
+        children=[
+            html.Div(className="metric-content", children=[
+                icon_element,
+                html.Div(className="metric-text", children=[
+                    html.Div(label, className="metric-label"),
+                    html.Div(range_parts, className="metric-range")
+                ])
+            ])
+        ]
+    )
+
+
+def create_status_metric(
+    label: str,
+    status: bool,
+    success_text: str = "Yes",
+    failure_text: str = "No",
+    icon: Optional[str] = None
+) -> html.Div:
+    """Create a metric card showing binary status (success/failure).
+    
+    Args:
+        label: Metric label text
+        status: True for success, False for failure
+        success_text: Text to show on success
+        failure_text: Text to show on failure
+        icon: Optional emoji/unicode icon
+    
+    Returns:
+        Styled status metric card
+    """
+    status_class = "metric-card-success" if status else "metric-card-error"
+    status_text = success_text if status else failure_text
+    default_icon = "✓" if status else "✗"
+    display_icon = icon if icon else default_icon
+    
+    return html.Div(
+        className=f"metric-card {status_class}",
+        children=[
+            html.Div(className="metric-content", children=[
+                html.Span(display_icon, className="metric-icon"),
+                html.Div(className="metric-text", children=[
+                    html.Div(label, className="metric-label"),
+                    html.Div(status_text, className="metric-value")
+                ])
+            ])
+        ]
+    )
+
+
+def create_metric_group(
+    title: str,
+    metrics: List[html.Div],
+    group_class: str = "metric-group"
+) -> html.Div:
+    """Group multiple metric cards under a common title.
+    
+    Args:
+        title: Group title
+        metrics: List of metric card components
+        group_class: CSS class for the group container
+    
+    Returns:
+        Grouped metrics container
+    """
+    return html.Div(
+        className=group_class,
+        children=[
+            html.H4(title, className="metric-group-title"),
+            html.Div(metrics, className="metric-grid")
+        ]
+    )
+
+
+def create_progress_modal():
+    """Create a bottom sheet modal for long-running operations.
+    
+    Modal slides up from bottom with no backdrop dimming.
+    Shows operation progress with icon, title, progress bar, and details.
+    """
+    return html.Div(
+        id="progress-modal",
+        className="progress-modal hidden",
+        children=[
+            html.Div(
+                className="progress-modal-content",
+                children=[
+                    # Icon on the left (spinner, success checkmark, or error X)
+                    html.Div(id="progress-modal-icon", className="progress-modal-icon"),
+                    # Content on the right (title, bar, details)
+                    html.Div([
+                        html.H4(id="progress-modal-title", className="progress-modal-title", children="Ready"),
+                        html.Div(
+                            className="progress-modal-bar-container",
+                            children=[
+                                html.Div(id="progress-modal-bar", className="progress-modal-bar-fill", style={"width": "0%"})
+                            ]
+                        ),
+                        html.Div(id="progress-modal-details", className="progress-modal-details", children="")
+                    ])
+                ]
+            )
+        ]
+    )
+
+
+def create_action_button(button_id, text, button_class="btn-primary", disabled=False):
+    """Create a button with loading state support.
+    
+    Args:
+        button_id: Unique ID for the button
+        text: Button label text
+        button_class: CSS class (btn-primary, btn-secondary, etc.)
+        disabled: Initial disabled state
+    
+    Returns:
+        Button component with spinner support
+    """
+    return html.Button(
+        id=button_id,
+        className=f"btn {button_class}",
+        disabled=disabled,
+        children=[
+            html.Span(id=f"{button_id}-spinner", className="btn-spinner hidden"),
+            html.Span(id=f"{button_id}-text", children=text)
+        ]
+    )
 
 
 def create_collapsible_section(section_id, step_number, title, content, optional=False, initial_collapsed=True):
@@ -82,9 +361,6 @@ def create_control_panel(config=None):
         default_max_heat = building_filters.get("max_heat_demand")
     
     return html.Div([
-        # Add progress bar at the top
-        create_progress_bar(),
-        
         # Store for tracking workflow expansion state
         dcc.Store(id='workflow-expansion-store', data={'expanded_section': 'section-area-selection'}),
         
@@ -97,9 +373,7 @@ def create_control_panel(config=None):
             title='Area Selection',
             initial_collapsed=False,
             content=[
-                html.Button("Draw Analysis Area", 
-                           id="start-measurement-btn", 
-                           className="btn btn-primary"),
+                create_action_button("start-measurement-btn", "Draw Analysis Area", "btn-primary"),
                 html.Div([
                     html.Label("Operating Hours (h/year):", className="form-label"),
                     dcc.Input(
@@ -111,13 +385,12 @@ def create_control_panel(config=None):
                         max=8760,
                         step=1,
                         className="form-input"
-                    )
+                    ),
+                    html.Small("Valid range: 1-8760 hours per year", 
+                              style={"color": "#6b7280", "fontSize": "0.75rem", "marginTop": "0.25rem", "display": "block"})
                 ], className="form-group"),
                 html.Div(id="measurement-status", className="status-display"),
-                html.Div([
-                    html.H4("Data Summary", style={"margin-top": "1rem"}),
-                    html.Div(id="data-summary", className="summary-display")
-                ])
+                html.Div(id="data-summary", className="summary-display")
             ]
         ),
         
@@ -128,26 +401,21 @@ def create_control_panel(config=None):
             title='Heat Sources',
             initial_collapsed=True,
             content=[
-                html.Button("Add Heat Source", 
-                           id="add-heat-source-btn", 
-                           className="btn btn-secondary",
-                           disabled=True),
-                html.Button("Clear Heat Sources", 
-                           id="clear-heat-sources-btn", 
-                           className="btn btn-secondary",
-                           disabled=True),
+                create_action_button("add-heat-source-btn", "Add Heat Source", "btn-secondary", disabled=True),
+                create_action_button("clear-heat-sources-btn", "Clear Heat Sources", "btn-secondary", disabled=True),
                 html.Div([
                     html.Label("Mass Flow Calculation Mode:", className="form-label"),
                     dcc.RadioItems(
                         id="mass-flow-mode",
                         options=[
-                            {'label': ' Demand-matching (auto-calculated from building loads)', 'value': 'demand'},
-                            {'label': ' Manual (based on heat source production)', 'value': 'manual'}
+                            {'label': ' Demand-matching', 'value': 'demand'},
+                            {'label': ' Manual', 'value': 'manual'}
                         ],
                         value='demand',
                         className="form-radio",
                         style={"marginBottom": "10px"}
-                    )
+                    ),
+                    html.Div(id="mass-flow-mode-indicator")
                 ], className="form-group"),
                 html.Div([
                     html.Label("Annual Heat Production (GW/year):", className="form-label"),
@@ -160,8 +428,9 @@ def create_control_panel(config=None):
                         step=0.001,
                         className="form-input"
                     ),
-                    html.Div(id="mass-flow-mode-indicator", style={"marginTop": "5px"})
-                ], className="form-group"),
+                    html.Small("Valid range: ≥ 0 GW/year (used in manual mass flow mode)", 
+                              style={"color": "#6b7280", "fontSize": "0.75rem", "marginTop": "0.25rem", "display": "block"})
+                ], id="heat-production-input-container", className="form-group"),
                 html.Div(id="heat-source-status", className="status-display"),
                 html.Div(id="heat-source-summary", className="summary-display")
             ]
@@ -175,10 +444,7 @@ def create_control_panel(config=None):
             optional=True,
             initial_collapsed=True,
             content=[
-                html.Button("Apply Filters", 
-                           id="apply-filters-btn", 
-                           className="btn btn-primary",
-                           disabled=True),
+                create_action_button("apply-filters-btn", "Apply Filters", "btn-primary", disabled=True),
                 html.Div(id="filter-status", className="status-display"),
                 
                 # Heat Demand Filters
@@ -201,7 +467,9 @@ def create_control_panel(config=None):
                                 placeholder="Min kWh/year",
                                 value=default_min_heat,
                                 className="form-input"
-                            )
+                            ),
+                            html.Small("Minimum annual heat demand in kWh", 
+                                      style={"color": "#6b7280", "fontSize": "0.75rem", "marginTop": "0.25rem", "display": "block"})
                         ], style={"width": "48%", "display": "inline-block"}),
                         html.Div([
                             html.Label("Max Heat Demand:", className="form-label"),
@@ -211,7 +479,9 @@ def create_control_panel(config=None):
                                 placeholder="Max kWh/year",
                                 value=default_max_heat,
                                 className="form-input"
-                            )
+                            ),
+                            html.Small("Maximum annual heat demand in kWh", 
+                                      style={"color": "#6b7280", "fontSize": "0.75rem", "marginTop": "0.25rem", "display": "block"})
                         ], style={"width": "48%", "display": "inline-block", "marginLeft": "4%"})
                     ], className="form-group"),
                 ]),
@@ -266,10 +536,7 @@ def create_control_panel(config=None):
             title='District Heating Network',
             initial_collapsed=True,
             content=[
-                html.Button("Generate Network", 
-                           id="generate-network-btn", 
-                           className="btn btn-primary",
-                           disabled=True),
+                create_action_button("generate-network-btn", "Generate Network", "btn-primary", disabled=True),
                 html.Div(id="network-status", className="status-display")
             ]
         ),
@@ -282,10 +549,7 @@ def create_control_panel(config=None):
             optional=True,
             initial_collapsed=True,
             content=[
-                html.Button("Optimize Network", 
-                           id="optimize-network-btn", 
-                           className="btn btn-primary",
-                           disabled=True),
+                create_action_button("optimize-network-btn", "Optimize Network", "btn-primary", disabled=True),
                 html.Div(id="network-optimization-status", className="status-display"),
                 html.Div([
                     html.Label("Max Building Connection Distance (m):", className="form-label"),
@@ -296,7 +560,9 @@ def create_control_panel(config=None):
                         value=config.graph_filters.get("max_building_connection_distance", 100.0) if config else 100.0,
                         min=0,
                         className="form-input"
-                    )
+                    ),
+                    html.Small("Valid range: ≥ 0 meters (max distance to connect buildings to street network)", 
+                              style={"color": "#6b7280", "fontSize": "0.75rem", "marginTop": "0.25rem", "display": "block"})
                 ], className="form-group"),
                 html.Div([
                     html.Label("Network Optimization:", className="form-label"),
@@ -330,8 +596,8 @@ def create_status_panel():
 
         # Minimal controls for initialization only
         html.Div([
-            html.Button("Initialize Net", id="sim-init-btn", className="btn btn-secondary", disabled=True),
-            html.Button("Run Pipeflow", id="sim-run-btn", className="btn btn-primary", disabled=True)
+            create_action_button("sim-init-btn", "Initialize Net", "btn-secondary", disabled=True),
+            create_action_button("sim-run-btn", "Run Pipeflow", "btn-primary", disabled=True)
         ], className="button-group"),
 
         # Status + summary placeholders

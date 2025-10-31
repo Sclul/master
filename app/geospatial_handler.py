@@ -345,9 +345,17 @@ class GeospatialHandler:
 
             # Apply building clustering if enabled in configuration
             clustering_config = self.config.config.get("building_clustering", {})
+            clustering_stats = None
             if clustering_config.get("auto_apply", False):
                 logger.info("Applying building clustering (auto-enabled)...")
+                building_count_before = len(gdf_filtered)
                 gdf_filtered = self.building_clusterer.cluster_buildings(gdf_filtered)
+                building_count_after = len(gdf_filtered)
+                clustering_stats = {
+                    "before_count": building_count_before,
+                    "after_count": building_count_after,
+                    "merged_count": building_count_before - building_count_after
+                }
             else:
                 logger.info("Building clustering disabled in configuration")
 
@@ -369,8 +377,7 @@ class GeospatialHandler:
                 "heat_demand_stats": heat_demand_stats
             }
             
-            if clustering_config.get("auto_apply", False):
-                clustering_stats = self.building_clusterer.get_clustering_statistics(gdf_filtered)
+            if clustering_stats:
                 result_data["clustering_stats"] = clustering_stats
             
             return result_data

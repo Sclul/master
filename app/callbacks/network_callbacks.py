@@ -7,6 +7,7 @@ from .base_callback import BaseCallback
 from network_constructor import NetworkConstructor
 from graph_generator import GraphGenerator
 from graph_filter import GraphFilter
+from utils.status_messages import status_message
 
 logger = logging.getLogger(__name__)
 
@@ -54,34 +55,40 @@ class NetworkCallbacks(BaseCallback):
                 if result.get("status") == "success":
                     progress_tracker.complete(f"Network generated: {result.get('total_nodes', 0)} nodes, {result.get('total_edges', 0)} edges")
                     
-                    status_message = html.Div([
-                        html.P(f"{result.get('message')}", className="success-message"),
-                        html.P(f"Total nodes: {result.get('total_nodes', 0)}", 
-                              className="info-message"),
-                        html.P(f"Total edges: {result.get('total_edges', 0)}", 
-                              className="info-message")
-                    ])
+                    # Import metric card components
+                    from layout.ui_components import create_metric_card, create_metric_group
                     
-                    return status_message, result
+                    # Create metric cards for network generation results
+                    metrics = [
+                        create_metric_card(
+                            label="Total Graph Nodes",
+                            value=result.get('total_nodes', 0),
+                            unit="nodes"
+                        ),
+                        create_metric_card(
+                            label="Total Graph Edges",
+                            value=result.get('total_edges', 0),
+                            unit="edges"
+                        )
+                    ]
+                    
+                    status_msg = create_metric_group(
+                        title="Network Generation Complete",
+                        metrics=metrics
+                    )
+                    
+                    return status_msg, result
                     
                 else:
                     progress_tracker.error(result.get('message', 'Network generation failed'))
-                    error_message = html.Div(
-                        f"Street network generation failed: {result.get('message')}", 
-                        className="error-message"
-                    )
-                    return error_message, result
+                    return status_message.error("Street network generation failed", details=result.get('message')), result
                     
             except Exception as e:
                 logger.error(f"Error in street network generation callback: {e}")
                 # Import here to avoid circular import
                 from utils.progress_tracker import progress_tracker
                 progress_tracker.error(str(e))
-                error_message = html.Div(
-                    f"Street network generation error: {str(e)}", 
-                    className="error-message"
-                )
-                return error_message, {"status": "error", "message": str(e)}
+                return status_message.error("Street network generation error", details=str(e)), {"status": "error", "message": str(e)}
             
         @self.app.callback(
             Output("network-status", "children", allow_duplicate=True),
@@ -131,12 +138,34 @@ class NetworkCallbacks(BaseCallback):
                     # Display optimization results
                     progress_tracker.complete(f"Network optimized: {result['node_reduction_percentage']}% nodes reduced, {result['edge_reduction_percentage']}% edges reduced")
                     
-                    status_msg = html.Div([
-                        html.P(f"Network optimized successfully", className="success-message"),
-                        html.P(f"Nodes: {result['initial_stats']['total_nodes']} → {result['final_stats']['total_nodes']} ({result['node_reduction_percentage']}% reduction)"),
-                        html.P(f"Edges: {result['initial_stats']['total_edges']} → {result['final_stats']['total_edges']} ({result['edge_reduction_percentage']}% reduction)"),
-                        html.P(f"Heat demand preserved: {result['final_stats']['total_heat_demand']} kW")
-                    ])
+                    # Import metric card components
+                    from layout.ui_components import create_reduction_metric, create_metric_card, create_metric_group
+                    
+                    # Create metric cards for optimization results
+                    metrics = [
+                        create_reduction_metric(
+                            label="Graph Nodes",
+                            before=result['initial_stats']['total_nodes'],
+                            after=result['final_stats']['total_nodes'],
+                            unit="nodes"
+                        ),
+                        create_reduction_metric(
+                            label="Graph Edges",
+                            before=result['initial_stats']['total_edges'],
+                            after=result['final_stats']['total_edges'],
+                            unit="edges"
+                        ),
+                        create_metric_card(
+                            label="Heat Demand Preserved",
+                            value=result['final_stats']['total_heat_demand'],
+                            unit="kW"
+                        )
+                    ]
+                    
+                    status_msg = create_metric_group(
+                        title="Network Optimization Complete",
+                        metrics=metrics
+                    )
                     
                     # Update network data to trigger map update
                     if geojson_result["status"] == "success":
@@ -151,11 +180,11 @@ class NetworkCallbacks(BaseCallback):
                         return status_msg, no_update
                 else:
                     progress_tracker.error(result['message'])
-                    return html.P(f"Error: {result['message']}", className="error-message"), no_update
+                    return status_message.error(result['message']), no_update
                     
             except Exception as e:
                 logger.error(f"Error optimizing network: {e}")
                 # Import here to avoid circular import
                 from utils.progress_tracker import progress_tracker
                 progress_tracker.error(str(e))
-                return html.P(f"Error: {str(e)}", className="error-message"), no_update
+                return status_message.error("Optimization failed", details=str(e)), no_update

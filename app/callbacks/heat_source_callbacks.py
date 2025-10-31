@@ -5,6 +5,7 @@ from dash import html # type: ignore
 
 from .base_callback import BaseCallback
 from heat_source_handler import HeatSourceHandler
+from utils.status_messages import status_message
 
 logger = logging.getLogger(__name__)
 
@@ -76,27 +77,39 @@ class HeatSourceCallbacks(BaseCallback):
                     heat_sources_list.append(source_dict)
             
             if result.get("status") == "success":
-                status_msg = html.Div([
-                    html.P(f"{result['message']}", className="success-message"),
-                    html.P(f"Location: {lat:.4f}, {lng:.4f}", className="info-message"),
-                    html.P(f"Production: {production} GW/year", className="info-message")
-                ])
+                # Import metric card components
+                from layout.ui_components import create_metric_card, create_metric_group
                 
                 # Convert total production from kW to GW for display
                 total_production_gw = summary.get('total_production', 0) / 1_000_000
-                summary_msg = html.Div([
-                    html.H4("Heat Source Summary", className="summary-title"),
-                    html.P(f"Total Sources: {summary.get('total_count', 0)}", className="info-message"),
-                    html.P(f"Total Production: {total_production_gw:.3f} GW/year", className="info-message")
-                ])
+                
+                status_msg = status_message.success(result['message'])
+                
+                # Create metric cards for heat source summary
+                metrics = [
+                    create_metric_card(
+                        label="Total Heat Sources",
+                        value=summary.get('total_count', 0),
+                        unit="sources"
+                    ),
+                    create_metric_card(
+                        label="Total Production Capacity",
+                        value=total_production_gw,
+                        unit="GW/year"
+                    )
+                ]
+                
+                summary_msg = create_metric_group(
+                    title="Heat Source Summary",
+                    metrics=metrics
+                )
                 
                 # Reset heat source mode after successful placement
                 self._heat_source_mode = False
                 
                 return status_msg, summary_msg, heat_sources_list
             else:
-                error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
-                return error_msg, no_update, no_update
+                return status_message.error(result.get('message', 'Unknown error')), no_update, no_update
         
         @self.app.callback(
             Output("heat-source-status", "children", allow_duplicate=True),
@@ -111,7 +124,7 @@ class HeatSourceCallbacks(BaseCallback):
             self._heat_source_mode = True
             logger.info("Heat source placement mode activated")
             
-            return html.Div("Click on the map to place a heat source", className="info-message")
+            return status_message.info("Click on the map to place a heat source")
         
         @self.app.callback(
             [
@@ -131,19 +144,34 @@ class HeatSourceCallbacks(BaseCallback):
             result = self.heat_source_handler.clear_all_heat_sources()
             
             if result.get("status") == "success":
-                status_msg = html.Div(f"{result['message']}", className="success-message")
-                summary_msg = html.Div([
-                    html.H4("Heat Source Summary", className="summary-title"),
-                    html.P("No heat sources", className="info-message")
-                ])
+                # Import metric card components
+                from layout.ui_components import create_metric_card, create_metric_group
+                
+                # Empty state
+                metrics = [
+                    create_metric_card(
+                        label="Total Heat Sources",
+                        value=0,
+                        unit="sources"
+                    ),
+                    create_metric_card(
+                        label="Total Production Capacity",
+                        value=0,
+                        unit="GW/year"
+                    )
+                ]
+                
+                summary_msg = create_metric_group(
+                    title="Heat Source Summary",
+                    metrics=metrics
+                )
                 
                 # Reset heat source mode
                 self._heat_source_mode = False
                 
-                return status_msg, summary_msg, []  # Return empty list
+                return status_message.success(result['message']), summary_msg, []  # Return empty list
             else:
-                error_msg = html.Div(f"{result.get('message', 'Unknown error')}", className="error-message")
-                return error_msg, no_update, no_update
+                return status_message.error(result.get('message', 'Unknown error')), no_update, no_update
         
         @self.app.callback(
             Output("heat-source-summary", "children", allow_duplicate=True),
@@ -152,6 +180,8 @@ class HeatSourceCallbacks(BaseCallback):
         )
         def update_heat_source_summary(heat_sources_data):
             """Update heat source summary when data changes."""
+            from layout.ui_components import create_metric_card, create_metric_group
+            
             if not heat_sources_data:
                 return no_update
             
@@ -161,18 +191,28 @@ class HeatSourceCallbacks(BaseCallback):
                 total_count = summary.get("total_count", 0)
                 total_production = summary.get("total_production", 0)
                 
-                if total_count == 0:
-                    return html.Div("No heat sources", className="info-message")
-                else:
-                    # Convert total production from kW to GW for display
-                    total_production_gw = total_production / 1_000_000
-                    return html.Div([
-                        html.H4("Heat Source Summary", className="summary-title"),
-                        html.P(f"Total Sources: {summary.get('count', 0)}", className="info-message"),
-                        html.P(f"Total Production: {total_production_gw:.3f} GW/year", className="info-message")
-                    ])
+                # Convert total production from kW to GW for display
+                total_production_gw = total_production / 1_000_000
+                
+                metrics = [
+                    create_metric_card(
+                        label="Total Heat Sources",
+                        value=total_count,
+                        unit="sources"
+                    ),
+                    create_metric_card(
+                        label="Total Production Capacity",
+                        value=total_production_gw,
+                        unit="GW/year"
+                    )
+                ]
+                
+                return create_metric_group(
+                    title="Heat Source Summary",
+                    metrics=metrics
+                )
             else:
-                return html.Div(f"{summary.get('message', 'Error getting summary')}", className="error-message")
+                return status_message.error(summary.get('message', 'Error getting summary'))
         
         @self.app.callback(
             [
@@ -186,15 +226,41 @@ class HeatSourceCallbacks(BaseCallback):
             """Update the mode indicator based on selected mode."""
             if mode == "demand":
                 indicator = html.Div([
-                    html.Span("✓ ", style={"color": "#28a745", "fontWeight": "bold"}),
-                    html.Span("Mass flow auto-calculated from total building loads", 
-                             style={"fontSize": "0.85em", "color": "#666", "fontStyle": "italic"})
-                ], style={"padding": "5px", "backgroundColor": "#f8f9fa", "borderRadius": "3px"})
+                    html.Strong("Auto-calculated from building demand", style={
+                        "color": "#059669",
+                        "fontSize": "0.85rem"
+                    })
+                ], style={
+                    "padding": "0.5rem 0.75rem", 
+                    "backgroundColor": "#f0fdf4", 
+                    "border": "1px solid #bbf7d0",
+                    "borderRadius": "0.375rem",
+                    "marginTop": "0.5rem"
+                })
             else:  # manual mode
                 indicator = html.Div([
-                    html.Span("⚙ ", style={"color": "#007bff", "fontWeight": "bold"}),
-                    html.Span("Mass flow calculated from heat source production values", 
-                             style={"fontSize": "0.85em", "color": "#666", "fontStyle": "italic"})
-                ], style={"padding": "5px", "backgroundColor": "#e7f3ff", "borderRadius": "3px"})
+                    html.Strong("Based on heat source production", style={
+                        "color": "#2563eb",
+                        "fontSize": "0.85rem"
+                    })
+                ], style={
+                    "padding": "0.5rem 0.75rem", 
+                    "backgroundColor": "#eff6ff", 
+                    "border": "1px solid #bfdbfe",
+                    "borderRadius": "0.375rem",
+                    "marginTop": "0.5rem"
+                })
             
             return indicator, mode
+
+        @self.app.callback(
+            Output("heat-production-input-container", "style"),
+            Input("mass-flow-mode", "value"),
+            prevent_initial_call=False
+        )
+        def toggle_production_input(mode):
+            """Show/hide production input based on mode."""
+            if mode == "demand":
+                return {"display": "none"}
+            else:
+                return {"display": "block"}

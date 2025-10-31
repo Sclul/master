@@ -16,54 +16,51 @@ class ProgressCallbacks(BaseCallback):
         """Register progress-related callbacks."""
         
         @self.app.callback(
-            [Output("progress-container", "style"),
-             Output("progress-container", "className"),
-             Output("progress-bar", "style"),
-             Output("progress-bar", "className"),
-             Output("progress-title", "children"),
-             Output("progress-details", "children"),
-             Output("progress-interval", "disabled")],
+            [Output("progress-modal", "className"),
+             Output("progress-modal-icon", "className"),
+             Output("progress-modal-title", "children"),
+             Output("progress-modal-bar", "style"),
+             Output("progress-modal-bar", "className"),
+             Output("progress-modal-details", "children")],
             [Input("progress-interval", "n_intervals")],
             prevent_initial_call=True
         )
-        def update_progress(n_intervals):
-            """Update progress bar display with enhanced visual feedback."""
+        def update_progress_modal(n_intervals):
+            """Update bottom sheet modal for long-running operations."""
             from utils.progress_tracker import progress_tracker
             
             state = progress_tracker.get_state()
             
-            # Container styling and classes
-            container_style = {"display": "block"}
-            container_class = "progress-widget active" if state["active"] else "progress-widget"
+            # Modal visibility - show when active
+            modal_class = "progress-modal visible" if state["active"] else "progress-modal hidden"
             
-            # Progress bar color based on state
-            bar_color = "#dc3545" if state["error"] else "#007bff"  # Red for error, blue for normal
-            
-            # Progress bar style with current width and enhanced styling
-            progress_bar_style = {
-                "width": f"{state['value']}%" if state["active"] else "0%",
-                "background": f"linear-gradient(90deg, {bar_color}, {bar_color}dd)" if state["error"] else None
-            }
-            
-            # Add shimmer effect for active operations
-            progress_bar_class = "progress-bar-fill active" if state["active"] and not state["error"] else "progress-bar-fill"
-            
-            # Title and details based on state
+            # Icon state (spinner, success, error)
             if not state["active"]:
-                title = "Ready"
-                details = "No operation in progress"
+                icon_class = "progress-modal-icon"
             elif state["error"]:
-                title = "Error"
-                details = state["message"]
+                icon_class = "progress-modal-icon error"
+            elif state["value"] >= 100:
+                icon_class = "progress-modal-icon success"
             else:
-                # Format ETA with icon
-                title = f"{state['message']}"
-                
-                # Build details with item counts and ETA
+                icon_class = "progress-modal-icon spinning"
+            
+            # Title
+            title = state["message"] if state["active"] else "Ready"
+            
+            # Progress bar style
+            bar_style = {"width": f"{state['value']}%"}
+            
+            # Progress bar class (red for error)
+            bar_class = "progress-modal-bar-fill error" if state["error"] else "progress-modal-bar-fill"
+            
+            # Details (percentage, items, ETA)
+            if not state["active"]:
+                details = ""
+            else:
                 details_parts = [f"{state['value']}% complete"]
                 
                 if state["total_items"] and state["processed_items"] is not None:
-                    details_parts.append(f"{state['processed_items']:,}/{state['total_items']:,} items")
+                    details_parts.append(f"{state['processed_items']:,} / {state['total_items']:,} items")
                 
                 if state["eta"] and state["eta"] > 0:
                     eta_str = f"{int(state['eta'] // 60)}m {int(state['eta'] % 60)}s" if state['eta'] > 60 else f"{int(state['eta'])}s"
@@ -71,38 +68,120 @@ class ProgressCallbacks(BaseCallback):
                 
                 details = " • ".join(details_parts)
             
-            # Auto-reset after completion - but only if no new operation has started
-            if state["value"] >= 100 and not state["error"] and state["active"]:
-                def reset_progress():
-                    import time
-                    time.sleep(3)  # Wait 3 seconds before resetting
-                    # Only reset if still at 100% (no new operation started)
-                    current_state = progress_tracker.get_state()
-                    if current_state["value"] >= 100 and current_state["active"]:
-                        progress_tracker.reset()
-                
-                # Store timer reference so it can be cancelled if needed
-                timer = threading.Timer(3.0, reset_progress)
-                progress_tracker._reset_timer = timer
-                timer.start()
-            
-            return (
-                container_style,
-                container_class,
-                progress_bar_style,
-                progress_bar_class,
-                title,
-                details,
-                False  # Keep interval always active
-            )
+            return modal_class, icon_class, title, bar_style, bar_class, details
         
+        # Button loading state callbacks
         @self.app.callback(
-            Output("progress-interval", "disabled", allow_duplicate=True),
-            [Input("generate-network-btn", "n_clicks"), 
-             Input("optimize-network-btn", "n_clicks")],
+            [Output("start-measurement-btn", "disabled", allow_duplicate=True),
+             Output("start-measurement-btn-spinner", "className")],
+            [Input("progress-interval", "n_intervals")],
             prevent_initial_call=True
         )
-        def enable_progress_interval(network_clicks, optimize_clicks):
-            """Enable progress interval when any long-running operation starts."""
-            # Enable the interval to start tracking progress
-            return False
+        def update_measurement_button_state(n_intervals):
+            """Update measurement button loading state."""
+            from utils.progress_tracker import progress_tracker
+            state = progress_tracker.get_state()
+            
+            # Check if measurement operation is active
+            is_measuring = state["active"] and any(keyword in state["message"].lower() 
+                                                   for keyword in ["extract", "building", "street", "polygon"])
+            
+            disabled = is_measuring
+            spinner_class = "btn-spinner" if is_measuring else "btn-spinner hidden"
+            
+            return disabled, spinner_class
+        
+        @self.app.callback(
+            [Output("generate-network-btn", "disabled", allow_duplicate=True),
+             Output("generate-network-btn-spinner", "className")],
+            [Input("progress-interval", "n_intervals")],
+            prevent_initial_call=True
+        )
+        def update_generate_network_button_state(n_intervals):
+            """Update generate network button loading state."""
+            from utils.progress_tracker import progress_tracker
+            state = progress_tracker.get_state()
+            
+            # Check if network generation is active
+            is_generating = state["active"] and "network" in state["message"].lower() and "optim" not in state["message"].lower()
+            
+            disabled = is_generating
+            spinner_class = "btn-spinner" if is_generating else "btn-spinner hidden"
+            
+            return disabled, spinner_class
+        
+        @self.app.callback(
+            [Output("optimize-network-btn", "disabled", allow_duplicate=True),
+             Output("optimize-network-btn-spinner", "className")],
+            [Input("progress-interval", "n_intervals")],
+            prevent_initial_call=True
+        )
+        def update_optimize_network_button_state(n_intervals):
+            """Update optimize network button loading state."""
+            from utils.progress_tracker import progress_tracker
+            state = progress_tracker.get_state()
+            
+            # Check if optimization is active
+            is_optimizing = state["active"] and "optim" in state["message"].lower()
+            
+            disabled = is_optimizing
+            spinner_class = "btn-spinner" if is_optimizing else "btn-spinner hidden"
+            
+            return disabled, spinner_class
+        
+        @self.app.callback(
+            [Output("apply-filters-btn", "disabled", allow_duplicate=True),
+             Output("apply-filters-btn-spinner", "className")],
+            [Input("progress-interval", "n_intervals")],
+            prevent_initial_call=True
+        )
+        def update_filter_button_state(n_intervals):
+            """Update filter button loading state."""
+            from utils.progress_tracker import progress_tracker
+            state = progress_tracker.get_state()
+            
+            # Check if filtering is active
+            is_filtering = state["active"] and "filter" in state["message"].lower()
+            
+            disabled = is_filtering
+            spinner_class = "btn-spinner" if is_filtering else "btn-spinner hidden"
+            
+            return disabled, spinner_class
+        
+        @self.app.callback(
+            [Output("sim-init-btn", "disabled", allow_duplicate=True),
+             Output("sim-init-btn-spinner", "className")],
+            [Input("progress-interval", "n_intervals")],
+            prevent_initial_call=True
+        )
+        def update_sim_init_button_state(n_intervals):
+            """Update simulation init button loading state."""
+            from utils.progress_tracker import progress_tracker
+            state = progress_tracker.get_state()
+            
+            # Check if initialization is active
+            is_initializing = state["active"] and "initializ" in state["message"].lower()
+            
+            disabled = is_initializing
+            spinner_class = "btn-spinner" if is_initializing else "btn-spinner hidden"
+            
+            return disabled, spinner_class
+        
+        @self.app.callback(
+            [Output("sim-run-btn", "disabled", allow_duplicate=True),
+             Output("sim-run-btn-spinner", "className")],
+            [Input("progress-interval", "n_intervals")],
+            prevent_initial_call=True
+        )
+        def update_sim_run_button_state(n_intervals):
+            """Update simulation run button loading state."""
+            from utils.progress_tracker import progress_tracker
+            state = progress_tracker.get_state()
+            
+            # Check if pipeflow is active
+            is_running = state["active"] and "pipeflow" in state["message"].lower()
+            
+            disabled = is_running
+            spinner_class = "btn-spinner" if is_running else "btn-spinner hidden"
+            
+            return disabled, spinner_class

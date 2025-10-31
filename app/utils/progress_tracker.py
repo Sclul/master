@@ -25,6 +25,7 @@ class ProgressTracker:
             self.start_time = None
             self.total_items = None  # New: total items to process
             self.processed_items = 0  # New: items processed so far
+            self.completion_time = None  # New: track completion time for auto-dismiss
     
     def start(self, message: str = "Processing...", total_items: int = None):
         """Start tracking progress."""
@@ -41,6 +42,7 @@ class ProgressTracker:
             self.start_time = time.time()
             self.total_items = total_items
             self.processed_items = 0
+            self.completion_time = None  # Reset completion time on new operation
             logger.info(f"Progress started: {message}" + (f" (total items: {total_items})" if total_items else ""))
     
     def update(self, value: int, message: str = None, processed_items: int = None):
@@ -68,14 +70,16 @@ class ProgressTracker:
         with self._lock:
             self.value = 100
             self.message = message
+            self.completion_time = time.time()  # Track when completed
             logger.info(f"Progress completed: {message}")
-            # Will be reset after a short delay by the callback
+            # Will be reset after a short delay by get_state()
     
     def error(self, message: str):
         """Mark progress as failed."""
         with self._lock:
             self.has_error = True
             self.message = f"Error: {message}"
+            self.completion_time = time.time()  # Track when errored
             logger.error(f"Progress error: {message}")
     
     def get_state(self):
@@ -83,9 +87,20 @@ class ProgressTracker:
         with self._lock:
             elapsed = time.time() - self.start_time if self.start_time else 0
             
+            # Auto-dismiss after 3 seconds if completed or errored
+            if self.completion_time is not None:
+                time_since_completion = time.time() - self.completion_time
+                if time_since_completion > 3.0:
+                    # Auto-reset
+                    logger.debug("Auto-dismissing progress after 3 seconds")
+                    self.active = False
+                    self.value = 0
+                    self.completion_time = None
+                    self.has_error = False
+            
             # Calculate estimated time remaining
             eta = None
-            if self.active and self.value > 0 and elapsed > 0:
+            if self.active and self.value > 0 and elapsed > 0 and self.value < 100:
                 estimated_total_time = (elapsed / self.value) * 100
                 eta = estimated_total_time - elapsed
                 
