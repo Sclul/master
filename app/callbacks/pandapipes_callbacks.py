@@ -4,7 +4,7 @@ Wires the "Initialize Net" button to build the pandapipes network from the
 current GraphML and reports a concise summary.
 """
 import logging
-from dash_extensions.enrich import Input, Output # type: ignore
+from dash_extensions.enrich import Input, Output, State # type: ignore
 from dash import html # type: ignore
 
 from .base_callback import BaseCallback
@@ -165,7 +165,9 @@ class PandapipesCallbacks(BaseCallback):
             [
                 Output("sim-status", "children"),
                 Output("sim-summary", "children"),
-                Output("sim-run-state-store", "data")
+                Output("sim-run-state-store", "data"),
+                Output("validation-alert", "children"),
+                Output("validation-alert", "style")
             ],
             Input("sim-run-btn", "n_clicks"),
             prevent_initial_call=True
@@ -174,7 +176,7 @@ class PandapipesCallbacks(BaseCallback):
             """Run pandapipes pipeflow on last-built network and summarize."""
             try:
                 if not n_clicks:
-                    return "", "", None
+                    return "", "", None, "", {'display': 'none'}
 
                 from pandapipes_builder import PandapipesBuilder  # type: ignore
                 from utils.progress_tracker import progress_tracker  # type: ignore
@@ -196,6 +198,11 @@ class PandapipesCallbacks(BaseCallback):
                     if result.get('errors'):
                         error_details.append(f"Errors: {', '.join(result.get('errors', []))}")
                     status_msg = status_message.error("Pipeflow failed to converge", details=error_details)
+                
+                # Build validation alert
+                validation_alert, alert_style = self._build_validation_alert(
+                    result.get("validation", {})
+                )
                 
                 # Import metric card components
                 from layout.ui_components import (
@@ -259,7 +266,111 @@ class PandapipesCallbacks(BaseCallback):
                     "timestamp": n_clicks
                 }
                 
-                return status_msg, summary, pipeflow_state
+                return status_msg, summary, pipeflow_state, validation_alert, alert_style
             except Exception as e:
                 logger.exception("Error in pipeflow run callback")
-                return status_message.error("Pipeflow failed", details=str(e)), "", None
+                return status_message.error("Pipeflow failed", details=str(e)), "", None, "", {'display': 'none'}
+        
+        # Add callback to toggle validation alert expansion
+        @self.app.callback(
+            [
+                Output("validation-alert-body", "className"),
+                Output("validation-alert-toggle-icon", "className")
+            ],
+            [Input("validation-alert-header", "n_clicks")],
+            [State("validation-alert-body", "className")],
+            prevent_initial_call=True
+        )
+        def toggle_validation_details(n_clicks, current_class):
+            """Toggle validation alert body expansion."""
+            if not n_clicks:
+                return current_class or "", "validation-alert-toggle"
+            
+            is_expanded = "expanded" in (current_class or "")
+            
+            if is_expanded:
+                return "", "validation-alert-toggle"
+            else:
+                return "validation-alert-body expanded", "validation-alert-toggle expanded"
+    
+    def _build_validation_alert(self, validation: dict) -> tuple:
+        """
+        Build validation alert component from validation dict.
+        
+        Returns:
+            (alert_content, alert_style) tuple
+        """
+        if not validation:
+            return "", {'display': 'none'}
+        
+        critical = validation.get('critical', [])
+        warnings = validation.get('warnings', [])
+        info = validation.get('info', [])
+        
+        # If all clear, show success message
+        if not critical and not warnings and not info:
+            alert_content = html.Div([
+                html.Div(
+                    "All validation checks passed",
+                    className="validation-alert-header",
+                    style={'cursor': 'default'}
+                )
+            ], className="validation-alert severity-success")
+            
+            return alert_content, {'display': 'block', 'marginBottom': '1rem'}
+        
+        # Determine severity (highest priority)
+        if critical:
+            severity = 'critical'
+            title = 'Critical Issues'
+        elif warnings:
+            severity = 'warning'
+            title = 'Warnings'
+        else:
+            severity = 'info'
+            title = 'Information'
+        
+        # Count messages
+        critical_count = len(critical)
+        warning_count = len(warnings)
+        info_count = len(info)
+        
+        # Build summary text
+        summary_parts = []
+        if critical_count:
+            summary_parts.append(f"{critical_count} critical")
+        if warning_count:
+            summary_parts.append(f"{warning_count} warning{'s' if warning_count > 1 else ''}")
+        if info_count:
+            summary_parts.append(f"{info_count} info")
+        summary_text = f"{title}: {', '.join(summary_parts)}"
+        
+        # Build message list
+        messages = []
+        for msg in critical:
+            messages.append(html.Li(msg, className="critical"))
+        for msg in warnings:
+            messages.append(html.Li(msg, className="warning"))
+        for msg in info:
+            messages.append(html.Li(msg, className="info"))
+        
+        # Build collapsible alert
+        alert_content = html.Div([
+            html.Div(
+                [
+                    html.Span(summary_text),
+                    html.Span("▼", id="validation-alert-toggle-icon", className="validation-alert-toggle")
+                ],
+                id="validation-alert-header",
+                className="validation-alert-header"
+            ),
+            html.Div(
+                html.Ul(messages, className="validation-message-list"),
+                id="validation-alert-body",
+                className="validation-alert-body"
+            )
+        ], className=f"validation-alert severity-{severity}")
+        
+        alert_style = {'display': 'block', 'marginBottom': '1rem'}
+        
+        return alert_content, alert_style

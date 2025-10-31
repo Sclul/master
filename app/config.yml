@@ -106,6 +106,24 @@ pandapipes:
     max_iter_hyd: 200  # Max hydraulic iterations
     max_iter_therm: 2000  # Max thermal iterations
     check_connectivity: true  # Verify network connectivity before solving
+  
+  # Result validation thresholds
+  validation:
+    # Pressure bounds (absolute pressure in bar)
+    min_pressure_bar: 1.0        # Below = cavitation risk
+    max_pressure_bar: 25.0       # Above = safety concern
+    critical_min_pressure_bar: 0.0  # Below = physically impossible
+    
+    # Velocity bounds (m/s)
+    min_velocity_m_per_s: 0.1    # Below = stagnation
+    max_velocity_m_per_s: 3.0    # Above = erosion/noise
+    
+    # Temperature checks
+    min_temperature_K: 273.15    # 0°C - below = physically impossible (ice)
+    
+    # Numerical checks
+    check_for_nan: true
+    check_for_inf: true
 
 
 

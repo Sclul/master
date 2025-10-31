@@ -600,7 +600,8 @@ def create_status_panel():
             create_action_button("sim-run-btn", "Run Pipeflow", "btn-primary", disabled=True)
         ], className="button-group"),
 
-        # Status + summary placeholders
+        # Status + validation alert + summary placeholders
         html.Div(id="sim-status", className="status-display"),
+        html.Div(id="validation-alert", style={'display': 'none'}),
         html.Div(id="sim-summary", className="status-display"),
     ], id="section-simulation", className="status-panel locked")  # Initially locked

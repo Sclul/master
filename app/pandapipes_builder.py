@@ -38,6 +38,8 @@ class PandapipesBuilder:
         self.config = config
         self.pp_cfg = config.pandapipes
         self.paths = config.data_paths
+        self.validation_cfg = self.pp_cfg.get("validation", {})
+        logger.debug(f"Validation config loaded: {self.validation_cfg}")
 
     # ------------- Public API -------------
     def build_from_graphml(self, graphml_path: str | None = None, operating_hours: float | None = None, 
@@ -380,6 +382,175 @@ class PandapipesBuilder:
         return summary
 
     # ------------- Simulation API -------------
+
+    def _validate_results(self, net) -> Dict[str, Any]:
+        """
+        Validate simulation results against physical constraints.
+        
+        Returns dict with:
+        - 'critical': List[str] - Physically impossible conditions
+        - 'warnings': List[str] - Suspicious but possible conditions  
+        - 'info': List[str] - Edge cases worth noting
+        - 'valid': bool - True if no critical issues
+        """
+        validation = {
+            'critical': [],
+            'warnings': [],
+            'info': [],
+            'valid': True
+        }
+        
+        # Get thresholds from config
+        min_p = self.validation_cfg.get('min_pressure_bar', 1.0)
+        max_p = self.validation_cfg.get('max_pressure_bar', 25.0)
+        critical_min_p = self.validation_cfg.get('critical_min_pressure_bar', 0.0)
+        min_v = self.validation_cfg.get('min_velocity_m_per_s', 0.1)
+        max_v = self.validation_cfg.get('max_velocity_m_per_s', 3.0)
+        max_temp_drop = self.validation_cfg.get('max_temp_drop_C', 30.0)
+        min_temp_K = self.validation_cfg.get('min_temperature_K', 273.15)
+        
+        # === CRITICAL CHECKS ===
+        
+        # Check for NaN/Inf values in junction results (always critical for junctions)
+        if self.validation_cfg.get('check_for_nan', True):
+            if hasattr(net, 'res_junction') and not net.res_junction.empty:
+                if net.res_junction.isnull().any().any():
+                    validation['critical'].append("NaN values detected in junction results")
+                    validation['valid'] = False
+                if net.res_junction.isin([float('inf'), float('-inf')]).any().any():
+                    validation['critical'].append("Infinite values detected in junction results")
+                    validation['valid'] = False
+            
+            # Check for NaN/Inf in pipe results (only critical if widespread)
+            if hasattr(net, 'res_pipe') and not net.res_pipe.empty:
+                # Check for NaN values - only flag if it's in pressure or a large percentage of velocities
+                nan_mask = net.res_pipe.isnull()
+                
+                # NaN in pressure is always critical
+                if 'p_from_bar' in net.res_pipe.columns and net.res_pipe['p_from_bar'].isnull().any():
+                    validation['critical'].append("NaN values detected in pipe pressure results")
+                    validation['valid'] = False
+                if 'p_to_bar' in net.res_pipe.columns and net.res_pipe['p_to_bar'].isnull().any():
+                    validation['critical'].append("NaN values detected in pipe pressure results")
+                    validation['valid'] = False
+                
+                # NaN in velocity is only critical if it's more than 50% of pipes (dead-ends are ok)
+                v_col = 'v_mean_m_per_s' if 'v_mean_m_per_s' in net.res_pipe.columns else 'v_m_per_s'
+                if v_col in net.res_pipe.columns:
+                    nan_velocity_count = net.res_pipe[v_col].isnull().sum()
+                    total_pipes = len(net.res_pipe)
+                    nan_velocity_pct = (nan_velocity_count / total_pipes * 100) if total_pipes > 0 else 0
+                    
+                    if nan_velocity_pct > 50:
+                        validation['critical'].append(f"NaN velocities in {nan_velocity_count}/{total_pipes} pipes ({nan_velocity_pct:.1f}%) - indicates solver failure")
+                        validation['valid'] = False
+                    elif nan_velocity_count > 0:
+                        validation['info'].append(f"INFO: {nan_velocity_count} pipes have NaN velocity (likely dead-ends with no flow)")
+                
+                # Infinite values are always critical
+                if net.res_pipe.isin([float('inf'), float('-inf')]).any().any():
+                    validation['critical'].append("Infinite values detected in pipe results")
+                    validation['valid'] = False
+        
+        # Check for negative absolute pressure (physically impossible)
+        if hasattr(net, 'res_junction') and 'p_bar' in net.res_junction.columns:
+            negative_p = net.res_junction[net.res_junction['p_bar'] < critical_min_p]
+            if not negative_p.empty:
+                junction_ids = negative_p.index.tolist()[:5]
+                msg = f"CRITICAL: {len(negative_p)} junctions have negative pressure"
+                if len(junction_ids) <= 5:
+                    msg += f": {', '.join(map(str, junction_ids))}"
+                else:
+                    msg += f": {', '.join(map(str, junction_ids))} (and {len(negative_p) - 5} more)"
+                validation['critical'].append(msg)
+                validation['valid'] = False
+        
+        # Check for negative/zero absolute temperature (physically impossible)
+        if hasattr(net, 'res_junction') and 't_k' in net.res_junction.columns:
+            invalid_temp = net.res_junction[net.res_junction['t_k'] < min_temp_K]
+            if not invalid_temp.empty:
+                junction_ids = invalid_temp.index.tolist()[:5]
+                temps_C = (invalid_temp['t_k'] - 273.15).tolist()[:5]
+                msg = f"CRITICAL: {len(invalid_temp)} junctions below {min_temp_K - 273.15:.1f}°C (freezing)"
+                if len(junction_ids) <= 5:
+                    temp_strs = [f"{jid} ({t:.1f}°C)" for jid, t in zip(junction_ids, temps_C)]
+                    msg += f": {', '.join(temp_strs)}"
+                else:
+                    temp_strs = [f"{jid} ({t:.1f}°C)" for jid, t in zip(junction_ids[:5], temps_C[:5])]
+                    msg += f": {', '.join(temp_strs)} (and {len(invalid_temp) - 5} more)"
+                validation['critical'].append(msg)
+                validation['valid'] = False
+        
+        # === WARNING CHECKS ===
+        
+        # Low pressure warning (cavitation risk)
+        if hasattr(net, 'res_junction') and 'p_bar' in net.res_junction.columns:
+            low_p = net.res_junction[(net.res_junction['p_bar'] >= critical_min_p) & 
+                                    (net.res_junction['p_bar'] < min_p)]
+            if not low_p.empty:
+                junction_ids = low_p.index.tolist()[:5]
+                pressures = low_p['p_bar'].tolist()[:5]
+                msg = f"WARNING: {len(low_p)} junctions below {min_p} bar (cavitation risk)"
+                if len(junction_ids) <= 5:
+                    p_strs = [f"{jid} ({p:.2f} bar)" for jid, p in zip(junction_ids, pressures)]
+                    msg += f": {', '.join(p_strs)}"
+                else:
+                    p_strs = [f"{jid} ({p:.2f} bar)" for jid, p in zip(junction_ids[:5], pressures[:5])]
+                    msg += f": {', '.join(p_strs)} (and {len(low_p) - 5} more)"
+                validation['warnings'].append(msg)
+        
+        # High pressure warning
+        if hasattr(net, 'res_junction') and 'p_bar' in net.res_junction.columns:
+            high_p = net.res_junction[net.res_junction['p_bar'] > max_p]
+            if not high_p.empty:
+                junction_ids = high_p.index.tolist()[:5]
+                pressures = high_p['p_bar'].tolist()[:5]
+                msg = f"WARNING: {len(high_p)} junctions exceed {max_p} bar (safety concern)"
+                if len(junction_ids) <= 5:
+                    p_strs = [f"{jid} ({p:.2f} bar)" for jid, p in zip(junction_ids, pressures)]
+                    msg += f": {', '.join(p_strs)}"
+                else:
+                    p_strs = [f"{jid} ({p:.2f} bar)" for jid, p in zip(junction_ids[:5], pressures[:5])]
+                    msg += f": {', '.join(p_strs)} (and {len(high_p) - 5} more)"
+                validation['warnings'].append(msg)
+        
+        # High velocity warning
+        if hasattr(net, 'res_pipe') and not net.res_pipe.empty:
+            v_col = 'v_mean_m_per_s' if 'v_mean_m_per_s' in net.res_pipe.columns else 'v_m_per_s'
+            if v_col in net.res_pipe.columns:
+                high_v = net.res_pipe[net.res_pipe[v_col] > max_v]
+                if not high_v.empty:
+                    pipe_ids = high_v.index.tolist()[:5]
+                    velocities = high_v[v_col].tolist()[:5]
+                    msg = f"WARNING: {len(high_v)} pipes exceed {max_v} m/s velocity (erosion risk)"
+                    if len(pipe_ids) <= 5:
+                        v_strs = [f"{pid} ({v:.2f} m/s)" for pid, v in zip(pipe_ids, velocities)]
+                        msg += f": {', '.join(v_strs)}"
+                    else:
+                        v_strs = [f"{pid} ({v:.2f} m/s)" for pid, v in zip(pipe_ids[:5], velocities[:5])]
+                        msg += f": {', '.join(v_strs)} (and {len(high_v) - 5} more)"
+                    validation['warnings'].append(msg)
+        
+        # === INFO CHECKS ===
+        
+        # Low velocity info (stagnation zones)
+        if hasattr(net, 'res_pipe') and not net.res_pipe.empty:
+            v_col = 'v_mean_m_per_s' if 'v_mean_m_per_s' in net.res_pipe.columns else 'v_m_per_s'
+            if v_col in net.res_pipe.columns:
+                low_v = net.res_pipe[(net.res_pipe[v_col] > 0) & (net.res_pipe[v_col] < min_v)]
+                if not low_v.empty:
+                    msg = f"INFO: {len(low_v)} pipes have velocity below {min_v} m/s (stagnation risk)"
+                    validation['info'].append(msg)
+        
+        # Log validation summary
+        logger.info(f"Validation complete: {len(validation['critical'])} critical, "
+                   f"{len(validation['warnings'])} warnings, {len(validation['info'])} info")
+        
+        if validation['critical']:
+            logger.warning(f"Critical issues: {validation['critical']}")
+        
+        return validation
+
     def run_pipeflow(self, net: Any | None = None, json_path: str | None = None) -> Dict[str, Any]:
         """Run pandapipes pipeflow on a two-pipe network and export results.
 
@@ -810,10 +981,28 @@ class PandapipesBuilder:
             elif "v_m_per_s" in net.res_pipe.columns:
                 v_max = float(net.res_pipe["v_m_per_s"].max())
 
+        t_min_C = float("nan")
+        t_max_C = float("nan")
+        if hasattr(net, "res_junction") and not net.res_junction.empty and "t_k" in net.res_junction.columns:
+            t_min_C = float(net.res_junction["t_k"].min()) - 273.15
+            t_max_C = float(net.res_junction["t_k"].max()) - 273.15
+
         # Get iteration count if available
         iter_count = None
         if hasattr(net, "_ppc") and hasattr(net._ppc, "get"):
             iter_count = net._ppc.get("iterations")
+
+        # Add validation results to summary
+        if converged:
+            validation = self._validate_results(net)
+        else:
+            # Don't validate if simulation didn't converge
+            validation = {
+                'critical': ['Simulation did not converge'],
+                'warnings': [],
+                'info': [],
+                'valid': False
+            }
 
         summary = {
             "converged": converged,
@@ -823,6 +1012,9 @@ class PandapipesBuilder:
             "p_min_bar": p_min,
             "p_max_bar": p_max,
             "v_max_m_per_s": v_max,
+            "t_min_C": t_min_C,
+            "t_max_C": t_max_C,
+            "t_range_C": t_max_C - t_min_C if not math.isnan(t_min_C) and not math.isnan(t_max_C) else float("nan"),
             "max_iter_hyd": max_iter_hyd,
             "max_iter_therm": max_iter_therm,
             "iterations": iter_count,
@@ -832,8 +1024,11 @@ class PandapipesBuilder:
             "pipe_results_geojson": p_geojson,
             "circuit_geojson_paths": geojson_paths,
             "errors": pipeflow_errors if pipeflow_errors else None,
+            "validation": validation,  # Add validation results
         }
-        logger.info(f"Pipeflow complete: converged={converged}, p_min={p_min:.2f} bar, p_max={p_max:.2f} bar, v_max={v_max:.2f} m/s")
+        logger.info(f"Pipeflow complete: converged={converged}, valid={validation['valid']}, "
+                   f"p_range=[{p_min:.2f}, {p_max:.2f}] bar, v_max={v_max:.2f} m/s, "
+                   f"t_range=[{t_min_C:.1f}, {t_max_C:.1f}] °C")
         logger.info(f"Exported {len(geojson_paths)} circuit-specific GeoJSON layers")
         return summary
 
