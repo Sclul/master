@@ -104,6 +104,27 @@ class MapCallbacks(BaseCallback):
 
         @self.app.callback(
             Output("layer-toggles", "value", allow_duplicate=True),
+            Input("buildings-processed", "data"),
+            State("layer-toggles", "value"),
+            prevent_initial_call=True
+        )
+        def auto_enable_buildings_layer(buildings_data, current_selected_layers):
+            """Auto-enable buildings layer when buildings are successfully processed."""
+            if not buildings_data or not isinstance(buildings_data, dict):
+                return no_update
+            
+            # Only auto-enable if buildings were just processed successfully
+            if buildings_data.get("status") == "processed":
+                updated_layers = (current_selected_layers or []).copy()
+                if "buildings" not in updated_layers:
+                    updated_layers.append("buildings")
+                    logger.info("Auto-enabling buildings layer after successful building extraction")
+                    return updated_layers
+            
+            return no_update
+
+        @self.app.callback(
+            Output("layer-toggles", "value", allow_duplicate=True),
             Input("network-data", "data"),
             State("layer-toggles", "value"),
             prevent_initial_call=True
@@ -339,20 +360,70 @@ class MapCallbacks(BaseCallback):
         )
     
     def _create_buildings_layer(self):
-        """Create buildings layer from saved data."""
-        return self._create_layer_from_file(
-            self.data_paths["buildings_path"],
-            "buildings-layer",
-            {"color": "red", "weight": 1, "fillOpacity": 0.3}
-        )
+        """Create buildings layer from saved data with cluster highlighting on hover."""
+        try:
+            file_path = self.data_paths["buildings_path"]
+            
+            # Read and reproject data
+            gdf = gpd.read_file(file_path)
+            
+            if gdf.crs and str(gdf.crs) != "EPSG:4326":
+                gdf = gdf.to_crs("EPSG:4326")
+                logger.debug(f"Reprojected buildings from {gdf.crs} to EPSG:4326")
+            
+            # Convert to GeoJSON dict
+            geojson_data = json.loads(gdf.to_json())
+            
+            logger.info(f"Creating buildings layer with {len(geojson_data.get('features', []))} features")
+            
+            # Create layer with hover style to highlight clusters
+            return dl.GeoJSON(
+                data=geojson_data,
+                id="buildings-layer",
+                options={"style": {"color": "red", "weight": 1, "fillOpacity": 0.3}},
+                # Highlight on hover - makes cluster boundaries more visible
+                hoverStyle={"weight": 3, "color": "#DC143C", "fillOpacity": 0.7}
+            )
+                
+        except FileNotFoundError:
+            logger.debug(f"buildings-layer file not found: {file_path}")
+            return None
+        except Exception as e:
+            logger.error(f"Error creating buildings-layer: {e}")
+            return None
     
     def _create_filtered_buildings_layer(self):
-        """Create filtered buildings layer from saved data."""
-        return self._create_layer_from_file(
-            self.data_paths["filtered_buildings_path"],
-            "filtered-buildings-layer",
-            {"color": "green", "weight": 2, "fillOpacity": 0.5}
-        )
+        """Create filtered buildings layer from saved data with cluster highlighting on hover."""
+        try:
+            file_path = self.data_paths["filtered_buildings_path"]
+            
+            # Read and reproject data
+            gdf = gpd.read_file(file_path)
+            
+            if gdf.crs and str(gdf.crs) != "EPSG:4326":
+                gdf = gdf.to_crs("EPSG:4326")
+                logger.debug(f"Reprojected filtered buildings from {gdf.crs} to EPSG:4326")
+            
+            # Convert to GeoJSON dict
+            geojson_data = json.loads(gdf.to_json())
+            
+            logger.info(f"Creating filtered buildings layer with {len(geojson_data.get('features', []))} features")
+            
+            # Create layer with hover style to highlight clusters
+            return dl.GeoJSON(
+                data=geojson_data,
+                id="filtered-buildings-layer",
+                options={"style": {"color": "green", "weight": 2, "fillOpacity": 0.5}},
+                # Highlight on hover - makes cluster boundaries more visible
+                hoverStyle={"weight": 4, "color": "#00FF00", "fillOpacity": 0.7}
+            )
+                
+        except FileNotFoundError:
+            logger.debug(f"filtered-buildings-layer file not found: {file_path}")
+            return None
+        except Exception as e:
+            logger.error(f"Error creating filtered-buildings-layer: {e}")
+            return None
     
     def _create_network_layer(self):
         """Create heating network layer from saved data."""
