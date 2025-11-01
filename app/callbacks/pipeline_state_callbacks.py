@@ -64,7 +64,14 @@ class PipelineStateCallbacks(BaseCallback):
                 # If buildings don't exist, reset all downstream steps
                 current_state['area_selection'] = False
             
-            # STEP 2: Heat Sources - check if any sources in store
+            # STEP 2: Building Filters - mark complete after first filter application
+            # Can be done independently after area selection
+            # Check if filter_status has content (indicates filters were applied)
+            if filter_status and not (filter_status == "" or filter_status is None):
+                current_state['building_filters'] = True
+            
+            # STEP 3: Heat Sources - check if any sources in store
+            # Can be done independently after area selection
             heat_sources_exist = False
             if heat_sources and isinstance(heat_sources, list) and len(heat_sources) > 0:
                 current_state['heat_sources'] = True
@@ -73,13 +80,8 @@ class PipelineStateCallbacks(BaseCallback):
                 # If no heat sources, reset all downstream steps
                 current_state['heat_sources'] = False
             
-            # STEP 3: Building Filters - mark complete after first filter application
-            # Check if filter_status has content (indicates filters were applied)
-            if filter_status and not (filter_status == "" or filter_status is None):
-                current_state['building_filters'] = True
-            
             # STEP 4: Network Generation - check if graphml exists
-            # Only check if previous required steps are complete
+            # Requires area selection AND heat sources (filters are optional)
             network_path = Path(self.data_paths.get("network_graphml_path", "./data/heating_network.graphml"))
             network_exists = False
             if buildings_exist and heat_sources_exist:
@@ -183,9 +185,9 @@ class PipelineStateCallbacks(BaseCallback):
             # Determine which sections are unlocked
             sections_unlocked = {
                 'section-area-selection': True,  # Always unlocked
-                'section-heat-sources': state.get('area_selection', False),
-                'section-building-filters': state.get('heat_sources', False),
-                'section-network-generation': state.get('heat_sources', False),
+                'section-building-filters': state.get('area_selection', False),  # Unlocked after area selection
+                'section-heat-sources': state.get('area_selection', False),  # Unlocked after area selection
+                'section-network-generation': state.get('heat_sources', False),  # Requires heat sources
                 'section-graph-optimization': state.get('network_generation', False)
             }
             
@@ -213,11 +215,11 @@ class PipelineStateCallbacks(BaseCallback):
                 if not state.get('area_selection', False):
                     # Step 1 not done yet - keep it expanded
                     expansion_store['expanded_section'] = 'section-area-selection'
-                elif not state.get('heat_sources', False):
-                    # Step 1 done, Step 2 not done - expand Step 2
-                    expansion_store['expanded_section'] = 'section-heat-sources'
+                elif not state.get('building_filters', False) and not state.get('heat_sources', False):
+                    # Step 1 done, neither Step 2 nor Step 3 done - expand Step 2 (Building Filters)
+                    expansion_store['expanded_section'] = 'section-building-filters'
                 elif not state.get('network_generation', False):
-                    # Step 2 done, Step 4 not done - skip optional Step 3, expand Step 4
+                    # Steps 1-3 done (or partially), Step 4 not done - expand Step 4
                     expansion_store['expanded_section'] = 'section-network-generation'
                 elif not state.get('graph_optimization', False):
                     # Step 4 done, Step 5 not done - expand optional Step 5
@@ -292,15 +294,15 @@ class PipelineStateCallbacks(BaseCallback):
                     'status-panel locked', True, True      # Simulation
                 )
             
-            # Step 2: Heat Sources (requires Step 1)
+            # Step 2: Building Filters (requires Step 1)
+            filters_unlocked = state.get('area_selection', False)
+            filters_class = 'control-section' if filters_unlocked else 'control-section locked'
+            
+            # Step 3: Heat Sources (requires Step 1)
             heat_sources_unlocked = state.get('area_selection', False)
             heat_sources_class = 'control-section' if heat_sources_unlocked else 'control-section locked'
             
-            # Step 3: Filters (requires Step 2)
-            filters_unlocked = state.get('heat_sources', False)
-            filters_class = 'control-section' if filters_unlocked else 'control-section locked'
-            
-            # Step 4: Network Generation (requires Step 2, filters optional)
+            # Step 4: Network Generation (requires Step 1 AND Step 3, Step 2 optional)
             # Network can be generated after heat sources, filters not required
             network_unlocked = state.get('heat_sources', False)
             network_class = 'control-section' if network_unlocked else 'control-section locked'
@@ -355,13 +357,13 @@ class PipelineStateCallbacks(BaseCallback):
             step1_content = "✓" if state.get('area_selection', False) else "1"
             step1_class = "step-number completed" if state.get('area_selection', False) else "step-number"
             
-            # Step 2: Heat Sources
-            step2_complete = state.get('heat_sources', False)
+            # Step 2: Building Filters
+            step2_complete = state.get('building_filters', False) or state.get('network_generation', False)
             step2_content = "✓" if step2_complete else "2"
             step2_class = "step-number completed" if step2_complete else "step-number"
             
-            # Step 3: Filters (optional) - mark complete if explicitly done OR if step 4 is complete
-            step3_complete = state.get('building_filters', False) or state.get('network_generation', False)
+            # Step 3: Heat Sources
+            step3_complete = state.get('heat_sources', False)
             step3_content = "✓" if step3_complete else "3"
             step3_class = "step-number completed" if step3_complete else "step-number"
             
@@ -409,7 +411,7 @@ class PipelineStateCallbacks(BaseCallback):
                 }
             raise PreventUpdate
         
-        # Reset downstream steps when adding/clearing heat sources (Step 2)
+        # Reset downstream steps when adding/clearing heat sources (Step 3)
         @self.app.callback(
             Output('pipeline-state-store', 'data', allow_duplicate=True),
             [
@@ -420,22 +422,22 @@ class PipelineStateCallbacks(BaseCallback):
             prevent_initial_call=True
         )
         def reset_downstream_on_heat_source_change(add_clicks, clear_clicks, current_state):
-            """Reset steps 3-6 when heat sources are modified."""
+            """Reset steps 4-6 when heat sources are modified (keep filters)."""
             if (add_clicks and add_clicks > 0) or (clear_clicks and clear_clicks > 0):
                 if current_state:
-                    # Keep steps 1-2, reset 3-6
+                    # Keep steps 1-3, reset 4-6
                     logger.info("Resetting downstream steps - heat sources modified")
                     return {
                         'area_selection': current_state.get('area_selection', False),
+                        'building_filters': current_state.get('building_filters', False),  # Keep filters
                         'heat_sources': current_state.get('heat_sources', False),
-                        'building_filters': False,
                         'network_generation': False,
                         'graph_optimization': False,
                         'simulation': False
                     }
             raise PreventUpdate
         
-        # Reset downstream steps when applying filters (Step 3)
+        # Reset downstream steps when applying filters (Step 2)
         @self.app.callback(
             Output('pipeline-state-store', 'data', allow_duplicate=True),
             Input('apply-filters-btn', 'n_clicks'),
@@ -443,15 +445,15 @@ class PipelineStateCallbacks(BaseCallback):
             prevent_initial_call=True
         )
         def reset_downstream_on_filter_change(n_clicks, current_state):
-            """Reset steps 4-6 when filters are applied."""
+            """Reset steps 4-6 when filters are applied (keep heat sources)."""
             if n_clicks and n_clicks > 0:
                 if current_state:
                     # Keep steps 1-3, reset 4-6
                     logger.info("Resetting downstream steps - filters applied")
                     return {
                         'area_selection': current_state.get('area_selection', False),
-                        'heat_sources': current_state.get('heat_sources', False),
                         'building_filters': current_state.get('building_filters', False),
+                        'heat_sources': current_state.get('heat_sources', False),  # Keep heat sources
                         'network_generation': False,
                         'graph_optimization': False,
                         'simulation': False
@@ -544,9 +546,9 @@ class PipelineStateCallbacks(BaseCallback):
             sim_summary_msg = no_update
             validation_style = no_update
             
-            # Step 1: Clear ALL downstream messages (steps 3-6)
+            # Step 1: Clear ALL downstream messages (steps 2-6)
             if trigger_id == 'start-measurement-btn':
-                logger.info("Step 1 clicked - clearing messages from steps 3-6")
+                logger.info("Step 1 clicked - clearing messages from steps 2-6")
                 filter_msg = ""
                 network_msg = ""
                 optimization_msg = ""
@@ -554,18 +556,17 @@ class PipelineStateCallbacks(BaseCallback):
                 sim_summary_msg = ""
                 validation_style = {'display': 'none'}
             
-            # Step 2: Clear messages from steps 3-6
-            elif trigger_id in ['add-heat-source-btn', 'clear-heat-sources-btn']:
-                logger.info("Step 2 clicked - clearing messages from steps 3-6")
-                filter_msg = ""
-                network_msg = ""
-                optimization_msg = ""
-                sim_msg = ""
-                sim_summary_msg = ""
-                validation_style = {'display': 'none'}
-            
-            # Step 3: Clear messages from steps 4-6
+            # Step 2: Clear messages from steps 4-6 (keep heat sources separate)
             elif trigger_id == 'apply-filters-btn':
+                logger.info("Step 2 clicked - clearing messages from steps 4-6")
+                network_msg = ""
+                optimization_msg = ""
+                sim_msg = ""
+                sim_summary_msg = ""
+                validation_style = {'display': 'none'}
+            
+            # Step 3: Clear messages from steps 4-6 (keep filters separate)
+            elif trigger_id in ['add-heat-source-btn', 'clear-heat-sources-btn']:
                 logger.info("Step 3 clicked - clearing messages from steps 4-6")
                 network_msg = ""
                 optimization_msg = ""

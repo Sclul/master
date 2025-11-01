@@ -130,7 +130,7 @@ class MapCallbacks(BaseCallback):
             prevent_initial_call=True
         )
         def manage_network_layers(network_data, current_selected_layers):
-            """Auto-enable network layers and disable streets when network is generated or optimized."""
+            """Auto-enable network layers and disable streets, buildings, and filtered buildings when network is generated or optimized."""
             if not network_data or not isinstance(network_data, dict):
                 return no_update
             
@@ -146,7 +146,7 @@ class MapCallbacks(BaseCallback):
                         logger.info("Auto-enabling filtered network layer after successful network optimization")
                         return updated_layers
                 else:
-                    # Otherwise, enable regular network layer and disable streets
+                    # Otherwise, enable regular network layer and disable streets, buildings, and filtered buildings
                     changes_made = False
                     if "network" not in updated_layers:
                         updated_layers.append("network")
@@ -155,6 +155,14 @@ class MapCallbacks(BaseCallback):
                     if "streets" in updated_layers:
                         updated_layers.remove("streets")
                         logger.info("Auto-disabling streets layer after successful network generation")
+                        changes_made = True
+                    if "buildings" in updated_layers:
+                        updated_layers.remove("buildings")
+                        logger.info("Auto-disabling buildings layer after successful network generation")
+                        changes_made = True
+                    if "filtered" in updated_layers:
+                        updated_layers.remove("filtered")
+                        logger.info("Auto-disabling filtered buildings layer after successful network generation")
                         changes_made = True
                     if changes_made:
                         return updated_layers

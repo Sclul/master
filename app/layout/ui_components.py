@@ -394,52 +394,10 @@ def create_control_panel(config=None):
             ]
         ),
         
-        # STEP 2: Heat Sources (initially collapsed)
-        create_collapsible_section(
-            section_id='section-heat-sources',
-            step_number=2,
-            title='Heat Sources',
-            initial_collapsed=True,
-            content=[
-                create_action_button("add-heat-source-btn", "Add Heat Source", "btn-secondary", disabled=True),
-                create_action_button("clear-heat-sources-btn", "Clear Heat Sources", "btn-secondary", disabled=True),
-                html.Div([
-                    html.Label("Mass Flow Calculation Mode:", className="form-label"),
-                    dcc.RadioItems(
-                        id="mass-flow-mode",
-                        options=[
-                            {'label': ' Demand-matching', 'value': 'demand'},
-                            {'label': ' Manual', 'value': 'manual'}
-                        ],
-                        value='demand',
-                        className="form-radio",
-                        style={"marginBottom": "10px"}
-                    ),
-                    html.Div(id="mass-flow-mode-indicator")
-                ], className="form-group"),
-                html.Div([
-                    html.Label("Annual Heat Production (GW/year):", className="form-label"),
-                    dcc.Input(
-                        id="heat-source-production-input",
-                        type="number",
-                        placeholder="e.g., 1",
-                        value=1,
-                        min=0,
-                        step=0.001,
-                        className="form-input"
-                    ),
-                    html.Small("Valid range: ≥ 0 GW/year (used in manual mass flow mode)", 
-                              style={"color": "#6b7280", "fontSize": "0.75rem", "marginTop": "0.25rem", "display": "block"})
-                ], id="heat-production-input-container", className="form-group"),
-                html.Div(id="heat-source-status", className="status-display"),
-                html.Div(id="heat-source-summary", className="summary-display")
-            ]
-        ),
-        
-        # STEP 3: Building Filters (optional, initially collapsed)
+        # STEP 2: Building Filters (optional, initially collapsed)
         create_collapsible_section(
             section_id='section-building-filters',
-            step_number=3,
+            step_number=2,
             title='Building Filters',
             optional=True,
             initial_collapsed=True,
@@ -526,6 +484,48 @@ def create_control_panel(config=None):
                         )
                     ], className="form-group"),
                 ])
+            ]
+        ),
+        
+        # STEP 3: Heat Sources (initially collapsed)
+        create_collapsible_section(
+            section_id='section-heat-sources',
+            step_number=3,
+            title='Heat Sources',
+            initial_collapsed=True,
+            content=[
+                create_action_button("add-heat-source-btn", "Add Heat Source", "btn-secondary", disabled=True),
+                create_action_button("clear-heat-sources-btn", "Clear Heat Sources", "btn-secondary", disabled=True),
+                html.Div([
+                    html.Label("Mass Flow Calculation Mode:", className="form-label"),
+                    dcc.RadioItems(
+                        id="mass-flow-mode",
+                        options=[
+                            {'label': ' Demand-matching', 'value': 'demand'},
+                            {'label': ' Manual', 'value': 'manual'}
+                        ],
+                        value='demand',
+                        className="form-radio",
+                        style={"marginBottom": "10px"}
+                    ),
+                    html.Div(id="mass-flow-mode-indicator")
+                ], className="form-group"),
+                html.Div([
+                    html.Label("Annual Heat Production (GW/year):", className="form-label"),
+                    dcc.Input(
+                        id="heat-source-production-input",
+                        type="number",
+                        placeholder="e.g., 1",
+                        value=1,
+                        min=0,
+                        step=0.001,
+                        className="form-input"
+                    ),
+                    html.Small("Valid range: ≥ 0 GW/year (used in manual mass flow mode)", 
+                              style={"color": "#6b7280", "fontSize": "0.75rem", "marginTop": "0.25rem", "display": "block"})
+                ], id="heat-production-input-container", className="form-group"),
+                html.Div(id="heat-source-status", className="status-display"),
+                html.Div(id="heat-source-summary", className="summary-display")
             ]
         ),
         
