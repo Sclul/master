@@ -630,6 +630,12 @@ class MapCallbacks(BaseCallback):
             if metric_name == "temp":
                 metric_min = metric_min - 273.15
                 metric_max = metric_max - 273.15
+                # Override with fixed scale for temperature: 0°C to 130°C
+                fixed_temp_min = 0.0
+                fixed_temp_max = 130.0
+            else:
+                fixed_temp_min = None
+                fixed_temp_max = None
             
             span = (metric_max - metric_min) if metric_max > metric_min else 1.0
             
@@ -638,23 +644,68 @@ class MapCallbacks(BaseCallback):
                 gdf = gdf.to_crs("EPSG:4326")
             
             def color_for(value):
-                """Generate color based on metric value."""
+                """Generate color based on metric value using 5-color gradient.
+                For temperature, uses fixed scale 0-130°C with clamping below 0°C.
+                For mass flow, uses logarithmic scale for better distribution.
+                """
                 try:
-                    norm = (float(value) - metric_min) / span
-                except Exception:
+                    if metric_name == "temp":
+                        # Use fixed temperature scale: 0°C to 130°C
+                        # Everything below 0°C gets same color (norm=0)
+                        if float(value) <= fixed_temp_min:
+                            norm = 0.0
+                        elif float(value) >= fixed_temp_max:
+                            norm = 1.0
+                        else:
+                            norm = (float(value) - fixed_temp_min) / (fixed_temp_max - fixed_temp_min)
+                    elif metric_name == "mass_flow":
+                        # Use logarithmic scale for mass flow (values typically 0.01 to 5+ kg/s)
+                        import math
+                        val = float(value)
+                        if val <= 0:
+                            norm = 0.0
+                        else:
+                            # Log scale: map 0.01 to 10+ kg/s
+                            # log10(0.01) = -2, log10(10) = 1
+                            log_val = math.log10(val)
+                            log_min = -2.0  # 0.01 kg/s
+                            log_max = 1.0   # 10 kg/s
+                            norm = (log_val - log_min) / (log_max - log_min)
+                            # Clamp to [0, 1]
+                            norm = max(0.0, min(1.0, norm))
+                    else:
+                        # Use linear data-driven scale for pressure
+                        norm = (float(value) - metric_min) / span
+                        # Clamp to [0, 1] to handle any edge cases
+                        norm = max(0.0, min(1.0, norm))
+                except (TypeError, ValueError, ZeroDivisionError):
                     norm = 0.5
-                norm = max(0.0, min(1.0, norm))
                 
-                # Color gradient: blue (low) -> green (mid) -> yellow -> red (high)
-                if norm < 0.5:
-                    # Blue to green
+                # 5-color gradient: blue (low) -> cyan -> green -> yellow -> red (high)
+                # Divide into 4 segments (0-0.25, 0.25-0.5, 0.5-0.75, 0.75-1.0)
+                if norm < 0.25:
+                    # Blue to Cyan
+                    t = norm * 4  # normalize to [0, 1] within segment
                     r = 0
-                    g = int(255 * (norm * 2))
-                    b = int(255 * (1 - norm * 2))
+                    g = int(255 * t * 0.5)  # 0 to 128
+                    b = 255
+                elif norm < 0.5:
+                    # Cyan to Green
+                    t = (norm - 0.25) * 4
+                    r = 0
+                    g = int(128 + 127 * t)  # 128 to 255
+                    b = int(255 * (1 - t))  # 255 to 0
+                elif norm < 0.75:
+                    # Green to Yellow
+                    t = (norm - 0.5) * 4
+                    r = int(255 * t)  # 0 to 255
+                    g = 255
+                    b = 0
                 else:
-                    # Green to red
-                    r = int(255 * ((norm - 0.5) * 2))
-                    g = int(255 * (1 - (norm - 0.5) * 2))
+                    # Yellow to Red
+                    t = (norm - 0.75) * 4
+                    r = 255
+                    g = int(255 * (1 - t))  # 255 to 0
                     b = 0
                 
                 return f"rgb({r},{g},{b})"
@@ -674,22 +725,27 @@ class MapCallbacks(BaseCallback):
                 
                 metric_value = row.get(metric_col)
                 
-                # Convert temperature from Kelvin to Celsius for display
+                # Convert temperature from Kelvin to Celsius BEFORE color calculation
                 if metric_name == "temp" and isinstance(metric_value, (int, float)):
-                    metric_value = metric_value - 273.15
+                    metric_value_celsius = metric_value - 273.15
+                else:
+                    metric_value_celsius = metric_value
                 
                 def _fmt(val):
                     return f"{val:.2f}" if isinstance(val, (int, float)) else "?"
                 
-                if isinstance(metric_value, (int, float)):
-                    tooltip_text = f"{layer_name}: {_fmt(metric_value)} {unit}"
+                # Use converted value for both color and display
+                if isinstance(metric_value_celsius, (int, float)):
+                    tooltip_text = f"{layer_name}: {_fmt(metric_value_celsius)} {unit}"
+                    line_color = color_for(metric_value_celsius)
                 else:
                     tooltip_text = f"{layer_name}: N/A"
+                    line_color = "#808080"  # Gray for invalid values
                 
                 polylines.append(dl.Polyline(
                     id=f"{layer_type}-poly-{idx}",
                     positions=positions,
-                    color=color_for(metric_value),
+                    color=line_color,
                     weight=3,
                     opacity=0.8,
                     children=[dl.Tooltip(tooltip_text)]
