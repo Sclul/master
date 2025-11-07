@@ -18,6 +18,57 @@ class HeatSourceCallbacks(BaseCallback):
         super().__init__(app, config)
         self.heat_source_handler = HeatSourceHandler(config)
         self._heat_source_mode = False  # Track if we're in heat source placement mode
+    
+    def _get_production_capacity_for_mode(self, mode, operating_hours=None):
+        """
+        Get production capacity based on mode.
+        
+        In demand mode: returns total building demand (kWh/year)
+        In manual mode: returns total heat source production (kWh/year)
+        """
+        from layout.ui_components import create_metric_card
+        from pathlib import Path
+        
+        summary = self.heat_source_handler.get_heat_sources_summary()
+        heat_source_count = summary.get('total_count', 0)
+        
+        if mode == "demand":
+            # In demand mode, show building demand as production capacity
+            # Load buildings to get total demand
+            buildings_path = self.config.data_paths.get("filtered_buildings_path", "./data/filtered_buildings.geojson")
+            if not Path(buildings_path).exists():
+                buildings_path = self.config.data_paths.get("buildings_path", "./data/buildings.geojson")
+            
+            if Path(buildings_path).exists():
+                import geopandas as gpd
+                buildings_gdf = gpd.read_file(buildings_path)
+                
+                if not buildings_gdf.empty and 'heat_demand' in buildings_gdf.columns:
+                    # Sum all building heat demands (already in kWh/year)
+                    total_demand_kwh = buildings_gdf['heat_demand'].sum()
+                    
+                    # Convert to appropriate unit
+                    if total_demand_kwh >= 1_000_000:
+                        production_value = total_demand_kwh / 1_000_000
+                        production_unit = "GWh/year"
+                    elif total_demand_kwh >= 1_000:
+                        production_value = total_demand_kwh / 1_000
+                        production_unit = "MWh/year"
+                    else:
+                        production_value = total_demand_kwh
+                        production_unit = "kWh/year"
+                    
+                    return heat_source_count, production_value, production_unit
+            
+            # Fallback if no buildings found
+            return heat_source_count, 0.0, "GWh/year"
+        else:
+            # Manual mode: show heat source production from file
+            total_production_kwh = summary.get('total_production', 0)  # Already in kWh/year
+            
+            # Convert to appropriate unit (same as manual entry: GW/year)
+            total_production_gw = total_production_kwh / 1_000_000
+            return heat_source_count, total_production_gw, "GW/year"
         
     def _register_callbacks(self):
         """Register heat source-related callbacks."""
@@ -31,11 +82,12 @@ class HeatSourceCallbacks(BaseCallback):
             Input("map", "click_lat_lng"),
             [
                 State("add-heat-source-btn", "n_clicks"),
-                State("heat-source-production-input", "value")
+                State("heat-source-production-input", "value"),
+                State("mass-flow-mode-store", "data")
             ],
             prevent_initial_call=True
         )
-        def handle_map_click_for_heat_source(click_coords, heat_source_btn_clicks, production_value):
+        def handle_map_click_for_heat_source(click_coords, heat_source_btn_clicks, production_value, mass_flow_mode):
             """Handle map clicks when in heat source placement mode."""
             if not click_coords or not heat_source_btn_clicks:
                 return no_update, no_update, no_update
@@ -57,9 +109,6 @@ class HeatSourceCallbacks(BaseCallback):
                 heat_source_type="Generic"
             )
             
-            # Get updated summary
-            summary = self.heat_source_handler.get_heat_sources_summary()
-            
             # Load all heat sources for the store
             heat_sources_gdf = self.heat_source_handler.load_heat_sources()
             heat_sources_list = []
@@ -80,8 +129,9 @@ class HeatSourceCallbacks(BaseCallback):
                 # Import metric card components
                 from layout.ui_components import create_metric_card, create_metric_group
                 
-                # Convert total production from kW to GW for display
-                total_production_gw = summary.get('total_production', 0) / 1_000_000
+                # Get production capacity based on mode
+                mode = mass_flow_mode if mass_flow_mode else "demand"
+                heat_source_count, production_value, production_unit = self._get_production_capacity_for_mode(mode)
                 
                 status_msg = status_message.success(result['message'])
                 
@@ -89,13 +139,13 @@ class HeatSourceCallbacks(BaseCallback):
                 metrics = [
                     create_metric_card(
                         label="Total Heat Sources",
-                        value=summary.get('total_count', 0),
+                        value=heat_source_count,
                         unit="sources"
                     ),
                     create_metric_card(
                         label="Total Production Capacity",
-                        value=total_production_gw,
-                        unit="GW/year"
+                        value=production_value,
+                        unit=production_unit
                     )
                 ]
                 
@@ -133,9 +183,10 @@ class HeatSourceCallbacks(BaseCallback):
                 Output("heat-sources-data", "data", allow_duplicate=True)
             ],
             Input("clear-heat-sources-btn", "n_clicks"),
+            State("mass-flow-mode-store", "data"),
             prevent_initial_call=True
         )
-        def clear_all_heat_sources(n_clicks):
+        def clear_all_heat_sources(n_clicks, mass_flow_mode):
             """Clear all heat sources."""
             if not n_clicks:
                 return no_update, no_update, no_update
@@ -147,17 +198,21 @@ class HeatSourceCallbacks(BaseCallback):
                 # Import metric card components
                 from layout.ui_components import create_metric_card, create_metric_group
                 
-                # Empty state
+                # Get production capacity based on mode
+                mode = mass_flow_mode if mass_flow_mode else "demand"
+                heat_source_count, production_value, production_unit = self._get_production_capacity_for_mode(mode)
+                
+                # Create metric cards
                 metrics = [
                     create_metric_card(
                         label="Total Heat Sources",
-                        value=0,
+                        value=heat_source_count,
                         unit="sources"
                     ),
                     create_metric_card(
                         label="Total Production Capacity",
-                        value=0,
-                        unit="GW/year"
+                        value=production_value,
+                        unit=production_unit
                     )
                 ]
                 
@@ -176,54 +231,51 @@ class HeatSourceCallbacks(BaseCallback):
         @self.app.callback(
             Output("heat-source-summary", "children", allow_duplicate=True),
             Input("heat-sources-data", "data"),
+            State("mass-flow-mode-store", "data"),
             prevent_initial_call=True
         )
-        def update_heat_source_summary(heat_sources_data):
+        def update_heat_source_summary(heat_sources_data, mass_flow_mode):
             """Update heat source summary when data changes."""
             from layout.ui_components import create_metric_card, create_metric_group
             
             if not heat_sources_data:
                 return no_update
             
-            summary = self.heat_source_handler.get_heat_sources_summary()
+            # Get production capacity based on mode
+            mode = mass_flow_mode if mass_flow_mode else "demand"
+            heat_source_count, production_value, production_unit = self._get_production_capacity_for_mode(mode)
             
-            if summary.get("status") == "success":
-                total_count = summary.get("total_count", 0)
-                total_production = summary.get("total_production", 0)
-                
-                # Convert total production from kW to GW for display
-                total_production_gw = total_production / 1_000_000
-                
-                metrics = [
-                    create_metric_card(
-                        label="Total Heat Sources",
-                        value=total_count,
-                        unit="sources"
-                    ),
-                    create_metric_card(
-                        label="Total Production Capacity",
-                        value=total_production_gw,
-                        unit="GW/year"
-                    )
-                ]
-                
-                return create_metric_group(
-                    title="Heat Source Summary",
-                    metrics=metrics
+            metrics = [
+                create_metric_card(
+                    label="Total Heat Sources",
+                    value=heat_source_count,
+                    unit="sources"
+                ),
+                create_metric_card(
+                    label="Total Production Capacity",
+                    value=production_value,
+                    unit=production_unit
                 )
-            else:
-                return status_message.error(summary.get('message', 'Error getting summary'))
+            ]
+            
+            return create_metric_group(
+                title="Heat Source Summary",
+                metrics=metrics
+            )
         
         @self.app.callback(
             [
                 Output("mass-flow-mode-indicator", "children"),
-                Output("mass-flow-mode-store", "data")
+                Output("mass-flow-mode-store", "data"),
+                Output("heat-source-summary", "children", allow_duplicate=True)
             ],
             Input("mass-flow-mode", "value"),
             prevent_initial_call=False
         )
         def update_mass_flow_mode_indicator(mode):
-            """Update the mode indicator based on selected mode."""
+            """Update the mode indicator based on selected mode and refresh summary."""
+            from layout.ui_components import create_metric_card, create_metric_group
+            
             if mode == "demand":
                 indicator = html.Div([
                     html.Strong("Auto-calculated from building demand", style={
@@ -251,7 +303,28 @@ class HeatSourceCallbacks(BaseCallback):
                     "marginTop": "0.5rem"
                 })
             
-            return indicator, mode
+            # Update heat source summary based on new mode
+            heat_source_count, production_value, production_unit = self._get_production_capacity_for_mode(mode)
+            
+            metrics = [
+                create_metric_card(
+                    label="Total Heat Sources",
+                    value=heat_source_count,
+                    unit="sources"
+                ),
+                create_metric_card(
+                    label="Total Production Capacity",
+                    value=production_value,
+                    unit=production_unit
+                )
+            ]
+            
+            summary = create_metric_group(
+                title="Heat Source Summary",
+                metrics=metrics
+            )
+            
+            return indicator, mode, summary
 
         @self.app.callback(
             Output("heat-production-input-container", "style"),

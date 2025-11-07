@@ -25,7 +25,8 @@ class PandapipesCallbacks(BaseCallback):
         @self.app.callback(
             [
                 Output("sim-status", "children"),
-                Output("sim-summary", "children")
+                Output("sim-summary", "children"),
+                Output("heat-source-summary", "children", allow_duplicate=True)
             ],
             [
                 Input("sim-init-btn", "n_clicks"),
@@ -37,8 +38,9 @@ class PandapipesCallbacks(BaseCallback):
         def on_sim_init(n_clicks, operating_hours, mass_flow_mode):
             """Handle Initialize Net button: build pandapipes net from GraphML and summarize."""
             try:
+                from dash_extensions.enrich import no_update  # type: ignore
                 if not n_clicks:
-                    return "", ""
+                    return "", "", no_update
 
                 # Lazy import to avoid any circulars and speed idle init
                 from pandapipes_builder import PandapipesBuilder  # type: ignore
@@ -155,11 +157,65 @@ class PandapipesCallbacks(BaseCallback):
                 summary = html.Div(summary_groups)
 
                 logger.info(f"Pandapipes net build summary: {result}")
-                return status_message.success("Pandapipes net initialized"), summary
+                
+                # Update heat source summary with actual production capacity in demand mode
+                heat_source_summary_update = no_update
+                if mode == "demand":
+                    # In demand mode, calculate actual production capacity from total heat load
+                    total_heat_load_w = result.get('total_heat_load_W', 0.0)
+                    
+                    # Convert to GWh/year using the same operating hours
+                    if operating_hours and operating_hours > 0:
+                        op_hours = operating_hours
+                    else:
+                        op_hours = float(self.config.pandapipes.get("assume_continuous_operation_h_per_year", 2000))
+                    
+                    # Convert from W to GWh/year: W → kW → kWh/year → GWh/year
+                    # total_heat_load_w is design power (W), multiply by op_hours to get annual energy
+                    total_production_kwh_year = (total_heat_load_w / 1000.0) * op_hours
+                    
+                    # Convert to appropriate unit (same logic as Total Heat Demand display)
+                    if total_production_kwh_year >= 1_000_000:
+                        production_value = total_production_kwh_year / 1_000_000
+                        production_unit = "GWh/year"
+                    elif total_production_kwh_year >= 1_000:
+                        production_value = total_production_kwh_year / 1_000
+                        production_unit = "MWh/year"
+                    else:
+                        production_value = total_production_kwh_year
+                        production_unit = "kWh/year"
+                    
+                    # Get heat source count
+                    from heat_source_handler import HeatSourceHandler
+                    handler = HeatSourceHandler(self.config)
+                    summary_data = handler.get_heat_sources_summary()
+                    heat_source_count = summary_data.get('total_count', 0)
+                    
+                    # Create updated heat source summary
+                    heat_source_metrics = [
+                        create_metric_card(
+                            label="Total Heat Sources",
+                            value=heat_source_count,
+                            unit="sources"
+                        ),
+                        create_metric_card(
+                            label="Total Production Capacity",
+                            value=production_value,
+                            unit=production_unit
+                        )
+                    ]
+                    
+                    heat_source_summary_update = create_metric_group(
+                        title="Heat Source Summary",
+                        metrics=heat_source_metrics
+                    )
+                
+                return status_message.success("Pandapipes net initialized"), summary, heat_source_summary_update
             except Exception as e:
                 logger.exception("Error in sim init callback")
                 # Provide a concise error to UI
-                return status_message.error("Initialization failed", details=str(e)), ""
+                from dash_extensions.enrich import no_update  # type: ignore
+                return status_message.error("Initialization failed", details=str(e)), "", no_update
 
         @self.app.callback(
             [
