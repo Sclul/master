@@ -209,7 +209,7 @@ body {
     margin-bottom: 0.5rem;
     border: 1px solid var(--gray-200);
     border-radius: var(--radius-md);
-    overflow: hidden;
+    overflow: visible;
     transition: var(--transition-base);
     background: white;
 }

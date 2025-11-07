@@ -574,8 +574,8 @@ def create_control_panel(config=None):
                             {"label": "All Building Connections", "value": "all_building_connections"},
                             {"label": "Steiner Tree", "value": "steiner_tree"}
                         ],
-                        value=config.graph_filters.get("default_pruning_algorithm", "none") if config else "none",
-                        multi=False,
+                        value="none",
+                        clearable=True,
                         className="form-dropdown"
                     )
                 ], className="form-group")
