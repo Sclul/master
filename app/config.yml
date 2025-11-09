@@ -58,6 +58,9 @@ graph_filters:
     minimum_spanning_tree:
     all_building_connections:
     steiner_tree:
+    loop_enhanced_mst:
+      max_loops_to_add: 50000  # Fixed number of best loops to add
+      min_improvement_score: 0.0  # Only add loops with positive improvement
 
 pandapipes:
   # Fluid properties

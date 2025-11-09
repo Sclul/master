@@ -485,6 +485,308 @@ class SteinerTreePruner(PruningAlgorithm):
         return steiner_graph, stats
 
 
+class LoopEnhancedMSTPruner(PruningAlgorithm):
+    """Create MST and strategically add loops to improve mass flow distribution in long branches."""
+    
+    def prune(self, G: nx.Graph, max_loops_to_add: int = 5000, 
+              min_branch_length_m: float = 100.0, 
+              prefer_edge_disjoint: bool = True, **kwargs) -> Tuple[nx.Graph, Dict[str, Any]]:
+        """
+        Create MST then add strategic loops to improve hydraulic performance.
+        
+        Args:
+            G: Input graph
+            max_loops_to_add: Maximum number of loops to create
+            min_branch_length_m: Only enhance branches longer than this threshold
+            prefer_edge_disjoint: Prefer loops that create edge-disjoint paths
+            
+        Returns:
+            Tuple of (optimized_graph, statistics)
+        """
+        if G.number_of_nodes() == 0:
+            return G, {"message": "Empty graph"}
+        
+        # Step 1: Create base MST using existing pruner
+        logger.info("Step 1: Creating base MST")
+        mst_pruner = MinimumSpanningTreePruner()
+        mst_graph, mst_stats = mst_pruner.prune(G, preserve_critical_nodes=True)
+        
+        if mst_graph.number_of_nodes() == 0:
+            return mst_graph, {**mst_stats, "message": "MST creation failed"}
+        
+        logger.info(f"Base MST: {mst_graph.number_of_nodes()} nodes, {mst_graph.number_of_edges()} edges")
+        
+        # Step 2: Identify heat sources and buildings
+        heat_source_nodes = [n for n, data in mst_graph.nodes(data=True) 
+                            if data.get('node_type') == 'heat_source']
+        building_nodes = [n for n, data in mst_graph.nodes(data=True) 
+                         if data.get('node_type') == 'building']
+        
+        if not heat_source_nodes:
+            logger.warning("No heat sources found in MST")
+            return mst_graph, {**mst_stats, "loops_added": 0, "message": "No heat sources"}
+        
+        if not building_nodes:
+            logger.warning("No buildings found in MST")
+            return mst_graph, {**mst_stats, "loops_added": 0, "message": "No buildings"}
+        
+        logger.info(f"Found {len(heat_source_nodes)} heat sources and {len(building_nodes)} buildings")
+        
+        # Step 3: Ensure edge weights exist
+        for u, v, data in G.edges(data=True):
+            if 'length' not in data or data['length'] is None:
+                pos_u = (G.nodes[u].get('x', 0), G.nodes[u].get('y', 0))
+                pos_v = (G.nodes[v].get('x', 0), G.nodes[v].get('y', 0))
+                data['length'] = ((pos_u[0] - pos_v[0])**2 + (pos_u[1] - pos_v[1])**2)**0.5
+        
+        # Step 4: Analyze branches from heat sources
+        logger.info("Step 2: Analyzing branches from heat sources")
+        branch_info = self._analyze_branches(mst_graph, heat_source_nodes, building_nodes)
+        
+        long_branches = [b for b in branch_info if b['length'] >= min_branch_length_m]
+        logger.info(f"Found {len(long_branches)} branches longer than {min_branch_length_m}m")
+        
+        # Step 5: Find candidate loop edges (edges in original graph but not in MST)
+        logger.info("Step 3: Identifying candidate loop edges")
+        mst_edges = set(mst_graph.edges())
+        candidate_loops = []
+        
+        for u, v, data in G.edges(data=True):
+            edge = (u, v) if (u, v) in mst_edges else (v, u)
+            reverse_edge = (v, u)
+            
+            # Skip if edge already in MST
+            if edge in mst_edges or reverse_edge in mst_edges:
+                continue
+            
+            # Skip if either node not in MST (disconnected component)
+            if not (mst_graph.has_node(u) and mst_graph.has_node(v)):
+                continue
+            
+            # This edge would create a loop
+            candidate_loops.append((u, v, data))
+        
+        logger.info(f"Found {len(candidate_loops)} candidate loop edges")
+        
+        if not candidate_loops:
+            logger.warning("No candidate loops found - MST is already optimal")
+            return mst_graph, {
+                **mst_stats,
+                "loops_added": 0,
+                "candidate_loops_found": 0,
+                "long_branches": len(long_branches)
+            }
+        
+        # Step 6: Score and rank loops
+        logger.info("Step 4: Scoring loops by hydraulic benefit")
+        loop_scores = self._score_loops(mst_graph, candidate_loops, building_nodes, heat_source_nodes)
+        
+        # Sort by score (highest first)
+        loop_scores.sort(key=lambda x: x['score'], reverse=True)
+        
+        logger.info(f"Top 5 loop scores: {[round(ls['score'], 2) for ls in loop_scores[:5]]}")
+        
+        # Step 7: Add loops iteratively
+        logger.info(f"Step 5: Adding up to {max_loops_to_add} loops")
+        loops_added = 0
+        total_loop_length = 0
+        added_edges = []
+        
+        for loop_info in loop_scores[:max_loops_to_add]:
+            u, v, edge_data, score = loop_info['u'], loop_info['v'], loop_info['edge_data'], loop_info['score']
+            avg_junctions = loop_info.get('avg_junctions', 0)
+            paths_analyzed = loop_info.get('paths_analyzed', 0)
+            
+            # Add the loop edge to MST
+            mst_graph.add_edge(u, v, **edge_data)
+            loops_added += 1
+            edge_length = edge_data.get('length', 0)
+            total_loop_length += edge_length
+            added_edges.append((u, v, edge_length, score, avg_junctions, paths_analyzed))
+            
+            if loops_added % 100 == 0:
+                logger.info(f"Added {loops_added} loops so far...")
+        
+        logger.info(f"Loop addition complete: {loops_added} loops added")
+        logger.info(f"Total loop length added: {total_loop_length:.2f}m")
+        
+        # Step 8: Verify network properties
+        final_is_connected = nx.is_connected(mst_graph)
+        final_components = nx.number_connected_components(mst_graph)
+        
+        # Check for actual loops (cycles)
+        try:
+            cycle_basis = nx.cycle_basis(mst_graph)
+            num_cycles = len(cycle_basis)
+            logger.info(f"Network now has {num_cycles} independent cycles")
+        except:
+            num_cycles = 0
+            logger.warning("Could not compute cycle basis")
+        
+        # Step 9: Calculate comprehensive statistics
+        original_length = sum(data.get('length', 0) for _, _, data in G.edges(data=True))
+        mst_length = mst_stats.get('total_length', 0)
+        final_length = sum(data.get('length', 0) for _, _, data in mst_graph.edges(data=True))
+        
+        stats = {
+            "algorithm": "loop_enhanced_mst",
+            "original_nodes": G.number_of_nodes(),
+            "original_edges": G.number_of_edges(),
+            "mst_nodes": mst_stats.get('mst_nodes', 0),
+            "mst_edges": mst_stats.get('mst_edges', 0),
+            "final_nodes": mst_graph.number_of_nodes(),
+            "final_edges": mst_graph.number_of_edges(),
+            "total_buildings": len(building_nodes),
+            "total_heat_sources": len(heat_source_nodes),
+            "connected_buildings": len([n for n in building_nodes if mst_graph.has_node(n)]),
+            "branches_analyzed": len(branch_info),
+            "long_branches": len(long_branches),
+            "candidate_loops_found": len(candidate_loops),
+            "loops_added": loops_added,
+            "independent_cycles": num_cycles,
+            "total_loop_length_m": round(total_loop_length, 2),
+            "mst_length_m": round(mst_length, 2),
+            "final_length_m": round(final_length, 2),
+            "original_length_m": round(original_length, 2),
+            "length_increase_from_mst": round(final_length - mst_length, 2),
+            "length_increase_percentage": round((final_length - mst_length) / mst_length * 100, 2) if mst_length > 0 else 0,
+            "is_connected": final_is_connected,
+            "num_components": final_components,
+            "top_loops_added": [{"u": u, "v": v, "length_m": round(length, 2), "score": round(score, 2),
+                                "avg_junctions": round(junctions, 2), "paths_helped": paths} 
+                               for u, v, length, score, junctions, paths in added_edges[:10]]
+        }
+        
+        logger.info(f"Loop-Enhanced MST complete:")
+        logger.info(f"  - MST length: {mst_length:.2f}m")
+        logger.info(f"  - Final length: {final_length:.2f}m (+{final_length - mst_length:.2f}m, +{stats['length_increase_percentage']:.1f}%)")
+        logger.info(f"  - Loops added: {loops_added}")
+        logger.info(f"  - Independent cycles: {num_cycles}")
+        
+        return mst_graph, stats
+    
+    def _analyze_branches(self, G: nx.Graph, heat_source_nodes: List, building_nodes: List) -> List[Dict[str, Any]]:
+        """
+        Analyze all paths from heat sources to buildings to identify branch characteristics.
+        
+        Returns:
+            List of branch info dicts with path length, buildings served, etc.
+        """
+        branches = []
+        
+        for heat_source in heat_source_nodes:
+            for building in building_nodes:
+                try:
+                    path = nx.shortest_path(G, source=heat_source, target=building, weight='length')
+                    path_length = nx.shortest_path_length(G, source=heat_source, target=building, weight='length')
+                    
+                    # Get heat demand for this building
+                    heat_demand = G.nodes[building].get('heat_demand', 0.0)
+                    try:
+                        heat_demand = float(heat_demand)
+                    except (ValueError, TypeError):
+                        heat_demand = 0.0
+                    
+                    branches.append({
+                        'heat_source': heat_source,
+                        'building': building,
+                        'path': path,
+                        'length': path_length,
+                        'heat_demand': heat_demand,
+                        'path_nodes': len(path)
+                    })
+                except nx.NetworkXNoPath:
+                    continue
+        
+        return branches
+    
+    def _score_loops(self, G: nx.Graph, candidate_loops: List[Tuple], 
+                     building_nodes: List, heat_source_nodes: List) -> List[Dict[str, Any]]:
+        """
+        Score candidate loop edges by their potential to improve hydraulic performance.
+        
+        Scoring criteria:
+        - Number of buildings that would gain a 2nd path
+        - Total heat demand of buildings that would benefit
+        - Number of junctions (nodes) on path between source and sink (fewer is better)
+        - Centrality of loop in network
+        
+        Returns:
+            List of scored loop dicts
+        """
+        scored_loops = []
+        
+        for u, v, edge_data in candidate_loops:
+            edge_length = edge_data.get('length', 0)
+            
+            # Calculate how many buildings would benefit from this loop
+            # A building benefits if adding this edge creates a 2nd path from heat source to building
+            buildings_benefited = 0
+            heat_demand_benefited = 0.0
+            total_junctions_in_paths = 0  # Count junctions (nodes) in affected paths
+            paths_analyzed = 0
+            
+            # Check if u and v are on paths from heat sources to buildings
+            for building in building_nodes:
+                for heat_source in heat_source_nodes:
+                    try:
+                        # Get current path
+                        current_path = nx.shortest_path(G, source=heat_source, target=building)
+                        
+                        # Check if both u and v are on this path (different positions)
+                        if u in current_path and v in current_path:
+                            u_idx = current_path.index(u)
+                            v_idx = current_path.index(v)
+                            
+                            # If u and v are on the same path with other nodes between them,
+                            # adding edge (u,v) creates a loop that benefits this building
+                            if abs(u_idx - v_idx) > 1:
+                                buildings_benefited += 1
+                                heat_demand = G.nodes[building].get('heat_demand', 0.0)
+                                try:
+                                    heat_demand = float(heat_demand)
+                                except (ValueError, TypeError):
+                                    heat_demand = 0.0
+                                heat_demand_benefited += heat_demand
+                                
+                                # Count junctions (nodes) in the path segment between u and v
+                                # This represents the number of "Abzweigungen" (branches/junctions) in the current path
+                                segment_start = min(u_idx, v_idx)
+                                segment_end = max(u_idx, v_idx)
+                                num_junctions = segment_end - segment_start + 1  # Include both endpoints
+                                total_junctions_in_paths += num_junctions
+                                paths_analyzed += 1
+                                
+                                break  # Count each building only once
+                    except nx.NetworkXNoPath:
+                        continue
+            
+            # Calculate average number of junctions per affected path
+            avg_junctions = total_junctions_in_paths / paths_analyzed if paths_analyzed > 0 else 1
+            
+            # Calculate score: benefit per junction (inverse of junctions = fewer junctions is better)
+            # Higher score = more buildings/demand served per junction avoided
+            # Using avg_junctions as denominator: fewer junctions in path = higher score
+            if avg_junctions > 0:
+                score = (buildings_benefited * 10.0 + heat_demand_benefited / 1000.0) / avg_junctions
+            else:
+                score = 0.0
+            
+            scored_loops.append({
+                'u': u,
+                'v': v,
+                'edge_data': edge_data,
+                'score': score,
+                'buildings_benefited': buildings_benefited,
+                'heat_demand_benefited': heat_demand_benefited,
+                'edge_length': edge_length,
+                'avg_junctions': avg_junctions,  # NEW: Average junctions in affected paths
+                'paths_analyzed': paths_analyzed  # NEW: Number of paths this loop helps
+            })
+        
+        return scored_loops
+
+
 class GraphFilter:
     """Handles graph filtering and optimization operations."""
     
@@ -502,7 +804,8 @@ class GraphFilter:
         return {
             "minimum_spanning_tree": MinimumSpanningTreePruner(),
             "all_building_connections": AllBuildingConnectionsPruner(),
-            "steiner_tree": SteinerTreePruner()
+            "steiner_tree": SteinerTreePruner(),
+            "loop_enhanced_mst": LoopEnhancedMSTPruner()
         }
     
     def filter_and_optimize_graph(self, 
