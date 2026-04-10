@@ -1,6 +1,8 @@
 osmnx_settings:
   consolidation_tolerance: 15
   network_type: "drive"
+  timeout: 300
+  overpass_endpoint: "https://lz4.overpass-api.de/api"
 
 server_settings:
   host: "0.0.0.0"

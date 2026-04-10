@@ -24,6 +24,13 @@ class GeospatialHandler:
         self.config = config
         self.osmnx_settings = config.osmnx_settings
         
+        # Increase OSMnx timeout to handle larger areas or slow API responses
+        ox.settings.requests_timeout = self.osmnx_settings.get("timeout", 300)
+        
+        # Configure custom Overpass endpoint to avoid 504 timeouts on the main server
+        custom_endpoint = self.osmnx_settings.get("overpass_endpoint", "https://lz4.overpass-api.de/api")
+        ox.settings.overpass_endpoint = custom_endpoint
+        
         # Heat demand configuration
         heat_config = config.heat_demand
         self.gdb_path = heat_config.get("gdb_path", "/gdb/GDB.gdb")
@@ -40,6 +47,31 @@ class GeospatialHandler:
         
         # Initialize building clusterer
         self.building_clusterer = BuildingClusterer(config)
+
+    def _normalize_attribute_value(self, value: Any) -> Any:
+        """Normalize attribute values to JSON/GraphML-safe scalar strings or numbers."""
+        if value is None:
+            return ""
+
+        if hasattr(value, "item"):
+            try:
+                value = value.item()
+            except Exception:
+                pass
+
+        if hasattr(value, "tolist"):
+            try:
+                value = value.tolist()
+            except Exception:
+                pass
+
+        if isinstance(value, (list, tuple, set)):
+            return ", ".join(str(v) for v in value)
+
+        if isinstance(value, dict):
+            return json.dumps(value, ensure_ascii=False)
+
+        return value
         
         
     def clear_data_directory(self) -> Dict[str, Any]:
@@ -153,11 +185,16 @@ class GeospatialHandler:
             # Create filtered GeoDataFrame with only essential data
             gdf_filtered = gdf_edges[available_columns].copy()
             
-            # Ensure 'name' column is a string, handling lists and None values
-            if 'name' in gdf_filtered.columns:
-                gdf_filtered['name'] = gdf_filtered['name'].apply(
-                    lambda x: ', '.join(x) if isinstance(x, list) else x
-                ).fillna('').astype(str)
+            # Normalize non-geometry attributes to avoid ndarray/list values in downstream serialization
+            for col in gdf_filtered.columns:
+                if col == "geometry":
+                    continue
+                gdf_filtered[col] = gdf_filtered[col].apply(self._normalize_attribute_value)
+
+            # Keep selected display columns as strings for consistent UI rendering
+            for col in ["name", "highway"]:
+                if col in gdf_filtered.columns:
+                    gdf_filtered[col] = gdf_filtered[col].fillna("").astype(str)
 
             # Save filtered GeoJSON
             gdf_filtered.to_file(streets_path, driver="GeoJSON")

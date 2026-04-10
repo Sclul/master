@@ -341,6 +341,35 @@ class MapCallbacks(BaseCallback):
             if gdf.crs and str(gdf.crs) != "EPSG:4326":
                 gdf = gdf.to_crs("EPSG:4326")
                 logger.debug(f"Reprojected {layer_id} from {gdf.crs} to EPSG:4326")
+
+            def _normalize_value(value):
+                if value is None:
+                    return ""
+
+                if hasattr(value, "item"):
+                    try:
+                        value = value.item()
+                    except Exception:
+                        pass
+
+                if hasattr(value, "tolist"):
+                    try:
+                        value = value.tolist()
+                    except Exception:
+                        pass
+
+                if isinstance(value, (list, tuple, set)):
+                    return ", ".join(str(v) for v in value)
+
+                if isinstance(value, dict):
+                    return json.dumps(value, ensure_ascii=False)
+
+                return value
+
+            for col in gdf.columns:
+                if col == "geometry":
+                    continue
+                gdf[col] = gdf[col].apply(_normalize_value)
             
             # Convert to GeoJSON dict
             geojson_data = json.loads(gdf.to_json())

@@ -437,18 +437,49 @@ class GraphGenerator:
 
     def _clean_graph_for_graphml(self, G: nx.Graph) -> None:
         """
-        Remove attributes with None values from nodes and edges for GraphML compliance.
+        Convert node/edge attributes to GraphML-safe scalar values.
         """
+        def _to_graphml_value(value: Any) -> Any:
+            if value is None:
+                return None
+
+            if hasattr(value, "item"):
+                try:
+                    value = value.item()
+                except Exception:
+                    pass
+
+            if hasattr(value, "tolist"):
+                try:
+                    value = value.tolist()
+                except Exception:
+                    pass
+
+            if isinstance(value, (list, tuple, set, dict)):
+                return json.dumps(value, ensure_ascii=False)
+
+            if isinstance(value, (str, int, float, bool)):
+                return value
+
+            return str(value)
+
         # Clean node attributes
-        for node, data in G.nodes(data=True):
-            none_keys = [k for k, v in data.items() if v is None]
-            for k in none_keys:
-                data.pop(k)
+        for _, data in G.nodes(data=True):
+            for key, value in list(data.items()):
+                converted = _to_graphml_value(value)
+                if converted is None:
+                    data.pop(key, None)
+                else:
+                    data[key] = converted
+
         # Clean edge attributes
-        for u, v, data in G.edges(data=True):
-            none_keys = [k for k, v in data.items() if v is None]
-            for k in none_keys:
-                data.pop(k)
+        for _, _, data in G.edges(data=True):
+            for key, value in list(data.items()):
+                converted = _to_graphml_value(value)
+                if converted is None:
+                    data.pop(key, None)
+                else:
+                    data[key] = converted
     
     def _generate_street_network(self, streets_gdf: gpd.GeoDataFrame) -> nx.Graph:
         """Generate single connected street network using coordinate-based nodes."""
