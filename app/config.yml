@@ -31,7 +31,7 @@ coordinate_system:
   input_crs: "EPSG:4326"
 
 map_settings:
-  default_center: [50.9413, 6.9572]
+  default_center: [51.4344, 6.7623]
   default_zoom: 15
   tile_url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
   attribution: "© OpenStreetMap contributors"
